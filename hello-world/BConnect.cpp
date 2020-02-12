@@ -71,12 +71,13 @@ int BConnection::SendData(const std::string &s)
     {
         return -1;
     }
+
+    Trace("Send data %s", s.c_str());
+    
     memcpy_s((void *)((char *)&_sendbuf[0] + _sendbuf_size), send_buf_max - _sendbuf_size, s.c_str(), s.size());
     _sendbuf_size += s.size();
     _sendbuf[_sendbuf_size] = 0;
     _sendbuf_size += 1;
-
-    toString();
 
     return s.size();
 }
@@ -103,8 +104,7 @@ std::string BConnection::Recv()
             _state = eDisconnect;
         }
     } while (iResult > 0);
-
-    Trace(ret.c_str());
+    
     return ret;
 }
 
@@ -119,7 +119,6 @@ int BConnection::HandleWrite()
             printf("send failed with error: %d\n", WSAGetLastError());
             break;
         }
-        Trace("send size %d\n", iResult);
         _pos += iResult;
         _sendbuf_size -= iResult;
         if (_sendbuf_size <= 0)
@@ -131,7 +130,6 @@ int BConnection::HandleWrite()
     memmove_s((void *)&_sendbuf[0], send_buf_max, (char *)&_sendbuf[0] + _pos, _sendbuf_size);
     _pos = 0;
 
-    
     return iResult;
 }
 

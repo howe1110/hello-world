@@ -41,7 +41,6 @@ void proc(const std::string &line)
     strsplit(line, funcname, paras);
     if (funcname.empty())
     {
-        std::cout << "should give command." << std::endl;
         return;
     }
     std::map<std::string, pfunc>::iterator pos = funcmap.find(funcname);
@@ -120,7 +119,7 @@ void joinFunc(const std::vector<std::string> &paras)
         return;
     }
     IDtype node = paras[0];
-    BNode::instance()->join(node);
+    BNode::instance()->StartJoin(node);
 }
 
 void startFunc(const std::vector<std::string> &paras)

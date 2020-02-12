@@ -44,14 +44,15 @@ public:
 
 public:
     void handleSuccessorReq(BConnection* conn, const std::string &s);
-    void handleSuccessorPsp(const std::string &s);
+    void handleSuccessorRsp(BConnection* conn, const std::string &s);
     void hanldeAskPredecessorReq(BConnection* conn, const std::string &s);
     void hanldeAskPredecessorRsp(void *msg);
     void handleJoinReq(BConnection* conn, const std::string &s);
-    void handleJoinPsp(const std::string &s);
+    void handleJoinPsp(BConnection* conn, const std::string &s);
 
 public:
     SOCKET Connect(IDtype id);
+    void StartJoin(IDtype id);
     void join(IDtype id);
     void exit();
     void stabilization();

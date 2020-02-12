@@ -62,11 +62,19 @@ void BNode::Start()
 
 BNode::BNode(/* args */)
 {
+    srand(time(NULL));
+    std::stringstream ss;
+    ss << rand() % 40000 + 10000;
+    _listen_port = ss.str();
+
     _id = _listen_port;
     _successor = _id;
     _predecessor = _id;
 
     _nodefuncmap["successorReq"] = &BNode::handleSuccessorReq;
+    _nodefuncmap["successorRsq"] = &BNode::handleSuccessorRsp;
+    _nodefuncmap["joinReq"] = &BNode::handleJoinReq;
+    _nodefuncmap["joinRsp"] = &BNode::handleJoinPsp;
 }
 
 BNode::~BNode()
@@ -88,39 +96,57 @@ IDtype BNode::getIdentify(const std::string s)
     return ss.str();
 }
 
-void BNode::handleSuccessorReq(BConnection* conn, const std::string &s)
+void BNode::handleSuccessorReq(BConnection *conn, const std::string &s)
 {
+    Trace("Handle successor request.");
     std::string id = s;
+    std::string rsp;
     if (_id == _successor && _successor == _predecessor)
     {
-        conn->SendData(_id);
+        rsp = "successorRsq " + _id;
+        conn->SendData(rsp);
     }
-    if (_id < id && id < _successor)
+    else if (_id < id && id < _successor)
     {
-        conn->SendData(_successor);
+        rsp = "successorRsq " + _successor;
+        conn->SendData(rsp);
     }
-    sendData(_successor, s);
+    else
+    {
+        sendData(_successor, s);
+    }
 }
 
-void BNode::handleSuccessorPsp(const std::string &s)
+void BNode::handleSuccessorRsp(BConnection *conn, const std::string &s)
 {
+    Trace("Handle successor response, successor {%s}", s.c_str());
     join(s);
 }
 
-void BNode::handleJoinReq(BConnection* conn, const std::string &s)
+void BNode::handleJoinReq(BConnection *conn, const std::string &s)
 {
+    Trace("Handle join request.");
     _predecessor = s;
-    conn->SendData(_id);
+    std::string sRsp = "joinRsp " + _id;
+    conn->SendData(sRsp);
 }
 
-void BNode::handleJoinPsp(const std::string &s)
+void BNode::handleJoinPsp(BConnection *conn, const std::string &s)
 {
+    Trace("Handle join rsponse.");
     _successor = s;
+    Trace("Join sunncessful.");
+}
+
+void BNode::StartJoin(IDtype id)
+{
+    std::string msg = "successorReq " + _id;
+    sendData(id, msg);
 }
 
 void BNode::join(IDtype id)
 {
-    std::string msg = "successorReq " + _id;
+    std::string msg = "joinReq " + _id;
     sendData(id, msg);
 }
 
@@ -134,11 +160,11 @@ void BNode::stabilization()
 
 void BNode::sendData(IDtype id, const std::string &msg)
 {
-    std::map<IDtype, BConnection*>::iterator it = connSoc.find(id);
+    std::map<IDtype, BConnection *>::iterator it = connSoc.find(id);
     if (it == connSoc.end())
     {
         SOCKET st = Connect(id);
-        if(st == INVALID_SOCKET)
+        if (st == INVALID_SOCKET)
         {
             return;
         }
@@ -152,10 +178,11 @@ void BNode::Show()
     printf("LocalNode:{%s}\n", _listen_port.c_str());
     sockaddr_in peeraddr;
     int size = sizeof(peeraddr);
-    for (std::map<IDtype, BConnection*>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
         it->second->toString();
     }
+    Trace("Predecessor: {%s}, Successor: {%s}", _predecessor.c_str(), _successor.c_str());
 }
 
 bool BNode::StartListen()
@@ -168,10 +195,6 @@ bool BNode::StartListen()
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_PASSIVE;
 
-    srand(time(NULL));
-    std::stringstream ss;
-    ss << rand() % 40000 + 10000;
-    _listen_port = ss.str();
     // Resolve the local address and port to be used by the server
     int iResult = getaddrinfo(NULL, _listen_port.c_str(), &hints, &result);
     if (iResult != 0)
@@ -241,18 +264,11 @@ bool BNode::StartListen()
             return false;
         }
 
-        if (addr.ss_family == AF_INET)
-        {
-            struct sockaddr_in *s = (struct sockaddr_in *)&addr;
-            port = ntohs(s->sin_port);
-            //inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
-        }
-        else
-        { // AF_INET6
-            struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
-            port = ntohs(s->sin6_port);
-            //inet_ntop(AF_INET6, &s->sin6_addr, ipstr, sizeof ipstr);
-        }
+        char saddr[INET6_ADDRSTRLEN] = {0};
+
+        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
+
+        Trace("Client from %s:%d connected.", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
 
         std::stringstream ss;
         ss << port;
@@ -331,7 +347,7 @@ FD_SET BNode::getFdSet()
 {
     FD_SET fds_;
     FD_ZERO(&fds_);
-    for (std::map<IDtype, BConnection*>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
         FD_SET(it->second->GetSocket(), &fds_);
     }
@@ -342,9 +358,9 @@ FD_SET BNode::getWriteSet()
 {
     FD_SET fds_;
     FD_ZERO(&fds_);
-    for (std::map<IDtype, BConnection*>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        if(it->second->SendBufSize() > 0)
+        if (it->second->SendBufSize() > 0 && it->second->GetState() == eConnected)
         {
             FD_SET(it->second->GetSocket(), &fds_);
         }
@@ -352,21 +368,33 @@ FD_SET BNode::getWriteSet()
     return fds_;
 }
 
-
 void BNode::handleReadSockets(FD_SET fds)
 {
-    for (std::map<IDtype, BConnection*>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end();)
     {
         if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
         {
-            parse(it->second, it->second->Recv());
+            std::string s = it->second->Recv();
+            Trace(s.c_str());
+            if (s.length() > 0)
+            {
+                parse(it->second, s);
+            }
+        }
+        if (it->second->GetState() == eDisconnect)
+        {
+            connSoc.erase(it++);
+        }
+        else
+        {
+            ++it;
         }
     }
 }
 
 void BNode::handleWriteSocket(FD_SET fds)
 {
-    for (std::map<IDtype, BConnection*>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
         if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
         {
@@ -377,7 +405,7 @@ void BNode::handleWriteSocket(FD_SET fds)
 
 void BNode::handleErrorSocket(FD_SET fds)
 {
-    for (std::map<IDtype, BConnection*>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
         if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
         {
@@ -388,7 +416,7 @@ void BNode::handleErrorSocket(FD_SET fds)
 
 void BNode::Close()
 {
-    for (std::map<IDtype, BConnection*>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
         int iResult = shutdown(it->second->GetSocket(), SD_BOTH);
         if (iResult == SOCKET_ERROR)
@@ -402,20 +430,19 @@ void BNode::Close()
     connSoc.clear();
 }
 
-void BNode::parse(BConnection* conn, const std::string &line)
+void BNode::parse(BConnection *conn, const std::string &line)
 {
     std::vector<std::string> paras;
     std::string funcname;
     strsplit(line, funcname, paras);
     if (funcname.empty())
     {
-        std::cout << "should give command." << std::endl;
         return;
     }
     std::map<std::string, NodeFunc>::iterator pos = _nodefuncmap.find(funcname);
     if (pos == _nodefuncmap.end())
     {
-        std::cout << "invalid command:" << funcname << std::endl;
+        Trace("Invalid command.");
         return;
     }
 
