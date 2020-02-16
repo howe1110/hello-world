@@ -14,6 +14,8 @@ enum ConnState
 const std::size_t send_buf_max = 65536;
 const std::string shakehand = "hello server.";
 
+const int maxidletimes = 10;
+
 #define DEFAULT_BUFLEN 512
 
 class BConnection : BBase
@@ -28,7 +30,6 @@ public:
 
 public:
     int SendData(const std::string &s);
-    void Close();
 
 public:
     std::string Recv();
@@ -45,6 +46,8 @@ public:
     int SendBufSize() const;
     bool CanWrite() const;
     std::string GetID() const;
+    bool IsTimeout();
+    void Idle();
 
 private:
     SOCKET _socket;
@@ -54,6 +57,7 @@ private:
     std::string _server;
     std::string _port;
     ConnState _state;
+    int idletimes;
 
 private:
     std::vector<char> _sendbuf;

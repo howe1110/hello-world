@@ -9,7 +9,7 @@
 #include <iostream>
 #include <sstream>
 
-BConnection::BConnection(SOCKET s) : _socket(s), _state(eConnected), _pos(0), _sendbuf_size(0), _initized(false)
+BConnection::BConnection(SOCKET s) : _socket(s), _state(eConnected), idletimes(0), _pos(0), _sendbuf_size(0), _initized(false)
 {
     _sendbuf.resize(send_buf_max);
 }
@@ -44,6 +44,16 @@ int BConnection::SendBufSize() const
     return _sendbuf_size;
 }
 
+bool BConnection::IsTimeout()
+{
+    return idletimes > maxidletimes;
+}
+
+void BConnection::Idle()
+{
+    idletimes++;
+}
+
 bool BConnection::CanWrite() const
 {
     if (_state == eConnecting)
@@ -69,19 +79,16 @@ int BConnection::SendData(const std::string &s)
         Trace("Buffer size overload.");
         return -1;
     }
-
-    Trace("Send data %s", s.c_str());
     
     memcpy_s((void *)((char *)&_sendbuf[0] + _sendbuf_size), send_buf_max - _sendbuf_size, s.c_str(), s.size());
     _sendbuf_size += s.size();
-    //_sendbuf[_sendbuf_size] = 0;
-    //_sendbuf_size += 1;
 
     return s.size();
 }
 
 std::string BConnection::Recv()
 {
+    idletimes = 0;
     char recvbuf[DEFAULT_BUFLEN];
     int iResult = 0;
     std::string ret;
@@ -107,6 +114,7 @@ std::string BConnection::Recv()
 
 int BConnection::HandleWrite()
 {
+    idletimes = 0;
     int iResult = 0;
     do
     {

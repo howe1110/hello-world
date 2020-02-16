@@ -156,8 +156,6 @@ void BNode::handleJoinPsp(BConnection *conn, const std::string &s)
 
     strsplit(s, '%', paras);
 
-    Trace("Join {%s} %d.", s.c_str(), paras.size());
-
     if (paras.size() != 2)
     {
         printf("invalid paras.\n");
@@ -328,7 +326,7 @@ bool BNode::StartListen()
 
         Trace("Client from %s:%d connected.", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
 
-        BConnection* pconn = new BConnection(ClientSocket);
+        BConnection *pconn = new BConnection(ClientSocket);
         if (pconn == nullptr)
         {
             printf("New BConnection failed with error %d\n", WSAGetLastError());
@@ -403,6 +401,25 @@ SOCKET BNode::Connect(const std::string &server, const std::string &port)
 
     Trace("Connect to %s:%s ok.\n", server.c_str(), port.c_str());
     return st;
+}
+
+void BNode::check()
+{
+    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end();)
+    {
+        (*it)->Idle();
+        if ((*it)->IsTimeout())
+        {
+            Trace("Time out.");
+            (*it)->Disconnect();
+            delete *it;
+            connSoc.erase(it++);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }
 
 FD_SET BNode::getFdSet()
@@ -533,16 +550,19 @@ void BNode::Proc()
         if (ret == SOCKET_ERROR)
         {
             Sleep(10000);
-            continue;
         }
-        if (ret == 0)
+        else if (ret == 0)
         {
             Sleep(1000);
-            continue;
         }
-        handleReadSockets(fds_r);
-        handleWriteSocket(fds_w);
-        handleErrorSocket(fds_e);
+        else
+        {
+            /* code */
+            handleReadSockets(fds_r);
+            handleWriteSocket(fds_w);
+            handleErrorSocket(fds_e);
+        }
+        check();
     }
     Close();
 }

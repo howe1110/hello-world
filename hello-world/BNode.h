@@ -73,6 +73,7 @@ private:
     void handleWriteSocket(FD_SET fds);
     void handleErrorSocket(FD_SET fds);
     IDtype getIdentify(const std::string s);
+    void check();
 
 private:
     SOCKET ListenSocket;
