@@ -76,7 +76,7 @@ private:
 
 private:
     SOCKET ListenSocket;
-    std::map<IDtype, BConnection*> connSoc;
+    std::set<BConnection*> connSoc;
     struct sockaddr_in *_listen_addr;
     std::string _listen_port;
 

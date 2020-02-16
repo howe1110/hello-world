@@ -107,21 +107,22 @@ void BNode::handleSuccessorReq(BConnection *conn, const std::string &s)
     if (_id < id && id < _successor)
     {
         rsp = "successorRsq " + _successor;
-        conn->SendData(rsp);
+        sendData(id, rsp);
     }
     else if (_id > _successor) //ring is end. response this node id.
     {
         rsp = "successorRsq " + _successor;
-        conn->SendData(rsp);
+        sendData(id, rsp);
     }
     else if (_id == _successor)
     {
         rsp = "successorRsq " + _successor;
-        conn->SendData(rsp);
+        sendData(id, rsp);
     }
     else
     {
-        sendData(_successor, s);
+        rsp = "successorReq " + id;
+        sendData(_successor, rsp);
     }
 }
 
@@ -141,7 +142,6 @@ void BNode::handleJoinReq(BConnection *conn, const std::string &s)
     }
     std::string sRsp = "joinRsp " + _id + "%" + _predecessor;
 
-
     _predecessor = s;
 
     _state = eOnLine;
@@ -153,7 +153,7 @@ void BNode::handleJoinPsp(BConnection *conn, const std::string &s)
 {
     Trace("Handle join rsponse.");
     std::vector<std::string> paras;
-    
+
     strsplit(s, '%', paras);
 
     Trace("Join {%s} %d.", s.c_str(), paras.size());
@@ -215,18 +215,20 @@ void BNode::stabilization()
 
 void BNode::sendData(IDtype id, const std::string &msg)
 {
-    std::map<IDtype, BConnection *>::iterator it = connSoc.find(id);
-    if (it == connSoc.end())
+    SOCKET st = Connect(id);
+    if (st == INVALID_SOCKET)
     {
-        SOCKET st = Connect(id);
-        if (st == INVALID_SOCKET)
-        {
-            Trace("Socket invalid.");
-            return;
-        }
-        connSoc[id] = new BConnection(st);
+        Trace("Socket invalid.");
+        return;
     }
-    connSoc[id]->SendData(msg);
+    BConnection *pconn = new BConnection(st);
+    if (pconn == nullptr)
+    {
+        printf("New BConnection failed with error %d\n", WSAGetLastError());
+        return;
+    }
+    connSoc.insert(pconn);
+    pconn->SendData(msg);
 }
 
 void BNode::Show()
@@ -234,9 +236,9 @@ void BNode::Show()
     Trace("LocalNode:{%s}\n", _listen_port.c_str());
     sockaddr_in peeraddr;
     int size = sizeof(peeraddr);
-    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        it->second->toString();
+        (*it)->toString();
     }
     Trace("Predecessor: {%s}, Successor: {%s}", _predecessor.c_str(), _successor.c_str());
 }
@@ -326,9 +328,13 @@ bool BNode::StartListen()
 
         Trace("Client from %s:%d connected.", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
 
-        std::stringstream ss;
-        ss << ntohs(s->sin_port);
-        connSoc[ss.str()] = new BConnection(ClientSocket);
+        BConnection* pconn = new BConnection(ClientSocket);
+        if (pconn == nullptr)
+        {
+            printf("New BConnection failed with error %d\n", WSAGetLastError());
+            continue;
+        }
+        connSoc.insert(pconn);
     }
 }
 
@@ -403,9 +409,9 @@ FD_SET BNode::getFdSet()
 {
     FD_SET fds_;
     FD_ZERO(&fds_);
-    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        FD_SET(it->second->GetSocket(), &fds_);
+        FD_SET((*it)->GetSocket(), &fds_);
     }
     return fds_;
 }
@@ -414,11 +420,11 @@ FD_SET BNode::getWriteSet()
 {
     FD_SET fds_;
     FD_ZERO(&fds_);
-    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        if (it->second->SendBufSize() > 0 && it->second->GetState() == eConnected)
+        if ((*it)->SendBufSize() > 0 && (*it)->GetState() == eConnected)
         {
-            FD_SET(it->second->GetSocket(), &fds_);
+            FD_SET((*it)->GetSocket(), &fds_);
         }
     }
     return fds_;
@@ -426,18 +432,18 @@ FD_SET BNode::getWriteSet()
 
 void BNode::handleReadSockets(FD_SET fds)
 {
-    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end();)
+    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end();)
     {
-        if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
+        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
         {
-            std::string s = it->second->Recv();
+            std::string s = (*it)->Recv();
             Trace(s.c_str());
             if (s.length() > 0)
             {
-                parse(it->second, s);
+                parse(*it, s);
             }
         }
-        if (it->second->GetState() == eDisconnect)
+        if ((*it)->GetState() == eDisconnect)
         {
             connSoc.erase(it++);
         }
@@ -450,38 +456,38 @@ void BNode::handleReadSockets(FD_SET fds)
 
 void BNode::handleWriteSocket(FD_SET fds)
 {
-    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
+        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
         {
-            it->second->HandleWrite();
+            (*it)->HandleWrite();
         }
     }
 }
 
 void BNode::handleErrorSocket(FD_SET fds)
 {
-    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
+        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
         {
-            it->second->HandleError();
+            (*it)->HandleError();
         }
     }
 }
 
 void BNode::Close()
 {
-    for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        int iResult = shutdown(it->second->GetSocket(), SD_BOTH);
+        int iResult = shutdown((*it)->GetSocket(), SD_BOTH);
         if (iResult == SOCKET_ERROR)
         {
             printf("shutdown failed with error: %d\n", WSAGetLastError());
-            closesocket(it->second->GetSocket());
+            closesocket((*it)->GetSocket());
             return;
         }
-        delete it->second;
+        delete *it;
     }
     connSoc.clear();
 }
