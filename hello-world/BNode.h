@@ -13,8 +13,10 @@ enum NodeState
     eOffLine,
     eJoining,
     eOnLine
-
 };
+
+
+const IDtype INVALID_NODEID = "0";
 
 class BNode : public BBase
 {
@@ -49,6 +51,8 @@ public:
     void hanldeAskPredecessorRsp(void *msg);
     void handleJoinReq(BConnection* conn, const std::string &s);
     void handleJoinPsp(BConnection* conn, const std::string &s);
+    void handleStabilizeReq(BConnection* conn, const std::string &s);
+    void handleStabilizeRsp(BConnection* conn, const std::string &s);
 
 public:
     SOCKET Connect(IDtype id);

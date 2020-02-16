@@ -9,10 +9,6 @@
 #include <iostream>
 #include <sstream>
 
-#define DEFAULT_BUFLEN 512
-char recvbuf[DEFAULT_BUFLEN];
-int recvbuflen = DEFAULT_BUFLEN;
-
 BConnection::BConnection(SOCKET s) : _socket(s), _state(eConnected), _pos(0), _sendbuf_size(0), _initized(false)
 {
     _sendbuf.resize(send_buf_max);
@@ -65,10 +61,12 @@ int BConnection::SendData(const std::string &s)
 {
     if (_state != eConnected)
     {
+        Trace("Not connected.");
         return -1;
     }
     if (_pos + _sendbuf_size + s.size() > send_buf_max)
     {
+        Trace("Buffer size overload.");
         return -1;
     }
 
@@ -76,8 +74,8 @@ int BConnection::SendData(const std::string &s)
     
     memcpy_s((void *)((char *)&_sendbuf[0] + _sendbuf_size), send_buf_max - _sendbuf_size, s.c_str(), s.size());
     _sendbuf_size += s.size();
-    _sendbuf[_sendbuf_size] = 0;
-    _sendbuf_size += 1;
+    //_sendbuf[_sendbuf_size] = 0;
+    //_sendbuf_size += 1;
 
     return s.size();
 }
@@ -85,7 +83,6 @@ int BConnection::SendData(const std::string &s)
 std::string BConnection::Recv()
 {
     char recvbuf[DEFAULT_BUFLEN];
-    int recvbuflen = DEFAULT_BUFLEN;
     int iResult = 0;
     std::string ret;
     // Receive until the peer closes the connection

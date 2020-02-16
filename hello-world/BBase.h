@@ -15,6 +15,7 @@ public:
     ~BBase();
 
 public:
+    static void strsplit(const std::string &s, const char delim, std::vector<std::string> &paras);
     static void strsplit(const std::string &s, std::string &funcname, std::vector<std::string> &paras);
 
 public:

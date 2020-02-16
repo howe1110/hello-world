@@ -13,6 +13,9 @@ enum ConnState
 
 const std::size_t send_buf_max = 65536;
 const std::string shakehand = "hello server.";
+
+#define DEFAULT_BUFLEN 512
+
 class BConnection : BBase
 {
 private:
@@ -57,4 +60,5 @@ private:
     int _pos;
     int _sendbuf_size;
     bool _initized;
+    const int recvbuflen = DEFAULT_BUFLEN;
 };

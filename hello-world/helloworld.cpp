@@ -122,6 +122,11 @@ void joinFunc(const std::vector<std::string> &paras)
     BNode::instance()->StartJoin(node);
 }
 
+void checkFunc(const std::vector<std::string> &paras)
+{
+    BNode::instance()->stabilization();
+}
+
 void startFunc(const std::vector<std::string> &paras)
 {
 }
@@ -143,6 +148,7 @@ bool initialize()
     funcmap["trace"] = TraceNodeDFunc;
     funcmap["??"] = dispHelp;
     funcmap["join"] = joinFunc;
+    funcmap["check"] = checkFunc;
     return true;
 }
 

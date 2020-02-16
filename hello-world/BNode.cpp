@@ -60,7 +60,7 @@ void BNode::Start()
     printf("Node started.\n");
 }
 
-BNode::BNode(/* args */)
+BNode::BNode(/* args */) : _predecessor(INVALID_NODEID), _successor(INVALID_NODEID)
 {
     srand(time(NULL));
     std::stringstream ss;
@@ -68,6 +68,7 @@ BNode::BNode(/* args */)
     _listen_port = ss.str();
 
     _id = _listen_port;
+
     _successor = _id;
     _predecessor = _id;
 
@@ -75,6 +76,8 @@ BNode::BNode(/* args */)
     _nodefuncmap["successorRsq"] = &BNode::handleSuccessorRsp;
     _nodefuncmap["joinReq"] = &BNode::handleJoinReq;
     _nodefuncmap["joinRsp"] = &BNode::handleJoinPsp;
+    _nodefuncmap["StabilizeReq"] = &BNode::handleStabilizeReq;
+    _nodefuncmap["StabilizeRsp"] = &BNode::handleStabilizeRsp;
 }
 
 BNode::~BNode()
@@ -101,12 +104,17 @@ void BNode::handleSuccessorReq(BConnection *conn, const std::string &s)
     Trace("Handle successor request.");
     std::string id = s;
     std::string rsp;
-    if (_id == _successor && _successor == _predecessor)
+    if (_id < id && id < _successor)
     {
-        rsp = "successorRsq " + _id;
+        rsp = "successorRsq " + _successor;
         conn->SendData(rsp);
     }
-    else if (_id < id && id < _successor)
+    else if (_id > _successor) //ring is end. response this node id.
+    {
+        rsp = "successorRsq " + _successor;
+        conn->SendData(rsp);
+    }
+    else if (_id == _successor)
     {
         rsp = "successorRsq " + _successor;
         conn->SendData(rsp);
@@ -126,16 +134,57 @@ void BNode::handleSuccessorRsp(BConnection *conn, const std::string &s)
 void BNode::handleJoinReq(BConnection *conn, const std::string &s)
 {
     Trace("Handle join request.");
+
+    if (_id == _successor)
+    {
+        _successor = s;
+    }
+    std::string sRsp = "joinRsp " + _id + "%" + _predecessor;
+
+
     _predecessor = s;
-    std::string sRsp = "joinRsp " + _id;
+
+    _state = eOnLine;
+
     conn->SendData(sRsp);
 }
 
 void BNode::handleJoinPsp(BConnection *conn, const std::string &s)
 {
     Trace("Handle join rsponse.");
-    _successor = s;
+    std::vector<std::string> paras;
+    
+    strsplit(s, '%', paras);
+
+    Trace("Join {%s} %d.", s.c_str(), paras.size());
+
+    if (paras.size() != 2)
+    {
+        printf("invalid paras.\n");
+        return;
+    }
+    _successor = paras[0];
+    _predecessor = paras[1];
+    _state = eOnLine;
     Trace("Join sunncessful.");
+}
+
+void BNode::handleStabilizeReq(BConnection *conn, const std::string &s)
+{
+    Trace("Handle Stabilize request.");
+    std::string sRsp = "StabilizeRsp " + _predecessor;
+    conn->SendData(sRsp);
+}
+
+void BNode::handleStabilizeRsp(BConnection *conn, const std::string &s)
+{
+    IDtype id = s;
+    if (id.compare(_id) != 0) //New node joined, change the successor.
+    {
+        Trace("New node join, change successor.{%s},{%s}", id.c_str(), _id.c_str());
+        _successor = id;
+    }
+    Trace("Stabilize successful.");
 }
 
 void BNode::StartJoin(IDtype id)
@@ -156,6 +205,12 @@ void BNode::exit()
 
 void BNode::stabilization()
 {
+    if (_state != eOnLine)
+    {
+        return;
+    }
+    std::string msg = "StabilizeReq " + _id;
+    sendData(_successor, msg);
 }
 
 void BNode::sendData(IDtype id, const std::string &msg)
@@ -166,6 +221,7 @@ void BNode::sendData(IDtype id, const std::string &msg)
         SOCKET st = Connect(id);
         if (st == INVALID_SOCKET)
         {
+            Trace("Socket invalid.");
             return;
         }
         connSoc[id] = new BConnection(st);
@@ -175,7 +231,7 @@ void BNode::sendData(IDtype id, const std::string &msg)
 
 void BNode::Show()
 {
-    printf("LocalNode:{%s}\n", _listen_port.c_str());
+    Trace("LocalNode:{%s}\n", _listen_port.c_str());
     sockaddr_in peeraddr;
     int size = sizeof(peeraddr);
     for (std::map<IDtype, BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
@@ -271,7 +327,7 @@ bool BNode::StartListen()
         Trace("Client from %s:%d connected.", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
 
         std::stringstream ss;
-        ss << port;
+        ss << ntohs(s->sin_port);
         connSoc[ss.str()] = new BConnection(ClientSocket);
     }
 }
@@ -459,6 +515,8 @@ void BNode::Proc()
     int ret = 0;
     _start = true;
 
+    int count = 0;
+
     sem_post(&app_sem);
     while (_start)
     {
@@ -471,7 +529,7 @@ void BNode::Proc()
             Sleep(10000);
             continue;
         }
-        if (ret = 0)
+        if (ret == 0)
         {
             Sleep(1000);
             continue;
@@ -484,7 +542,6 @@ void BNode::Proc()
 }
 
 //////////////////
-
 SOCKET BNode::Connect(IDtype id)
 {
     return Connect("192.168.1.81", id);

@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-
 BBase::BBase(/* args */) : _traceswitch(true)
 {
 }
@@ -23,6 +22,17 @@ void BBase::strsplit(const std::string &s, std::string &funcname, std::vector<st
             funcname = ss;
             continue;
         }
+        paras.push_back(ss);
+    }
+}
+
+void BBase::strsplit(const std::string &s, const char delim, std::vector<std::string> &paras)
+{
+    std::istringstream iss(s);
+    std::string ss;
+    int argc = 0;
+    while (std::getline(iss, ss, delim))
+    {
         paras.push_back(ss);
     }
 }
@@ -48,5 +58,5 @@ void BBase::Trace(const char *format, ...)
     vfprintf(stdout, format, args);
     va_end(args);
 
-    fprintf(stdout,"\n");
+    fprintf(stdout, "\n");
 }
