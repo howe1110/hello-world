@@ -8,10 +8,16 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include "network.h"
+#include "CNode.h"
 
-BConnection::BConnection(SOCKET s) : _socket(s), _state(eConnected), idletimes(0), _pos(0), _sendbuf_size(0), _initized(false)
+BConnection::BConnection(SOCKET s, CNode *own) : _socket(s), _owner(own), _state(eConnected), idletimes(0), _spos(0), _epos(0), _initized(false)
 {
     _sendbuf.resize(send_buf_max);
+    _recvbuf.resize(recvbuflen);
+    _recvbufpos = 0;
+    _revdata = &_recvbuf[0];
+    _recvmsgcount = 0;
 }
 
 BConnection::BConnection(const BConnection &r)
@@ -20,13 +26,12 @@ BConnection::BConnection(const BConnection &r)
     _state = r.GetState();
 }
 
-BConnection::~BConnection()
+BConnection::BConnection()
 {
 }
 
-std::string BConnection::GetID() const
+BConnection::~BConnection()
 {
-    return _id;
 }
 
 SOCKET BConnection::GetSocket() const
@@ -41,7 +46,17 @@ ConnState BConnection::GetState() const
 
 int BConnection::SendBufSize() const
 {
-    return _sendbuf_size;
+    return (_epos - _spos);
+}
+
+int BConnection::GetBufPos()
+{
+    return _recvbufpos;
+}
+
+char *BConnection::GetDataPos()
+{
+    return _revdata;
 }
 
 bool BConnection::IsTimeout()
@@ -60,47 +75,143 @@ bool BConnection::CanWrite() const
     {
         return true;
     }
-    if (_state == eConnected && _sendbuf_size > 0)
+    if (_state == eConnected && SendBufSize() > 0)
     {
         return true;
     }
     return false;
 }
 
-int BConnection::SendData(const std::string &s)
+//考虑用线程消息池实现
+void *BConnection::allocBNodeMsg(size_t len)
 {
-    if (_state != eConnected)
+    if ((send_buf_max - _epos) <= sendbufthreshold) //剩余发送缓冲区空间不够
     {
-        Trace("Not connected.");
-        return -1;
+        void* pSendData = &_sendbuf[0] +  + _spos;
+        memmove_s(&_sendbuf[0], send_buf_max, pSendData, _spos);
+        _epos -= _spos;
+        _spos = 0;
     }
-    if (_pos + _sendbuf_size + s.size() > send_buf_max)
-    {
-        Trace("Buffer size overload.");
-        return -1;
-    }
-    
-    memcpy_s((void *)((char *)&_sendbuf[0] + _sendbuf_size), send_buf_max - _sendbuf_size, s.c_str(), s.size());
-    _sendbuf_size += s.size();
 
-    return s.size();
+    if ((send_buf_max - _epos) < len) //剩余发送缓冲区空间不够
+    {
+        return nullptr;
+    }
+
+    void *buf = &_sendbuf[0] + _epos;
+    _epos += len;
+    return buf;
 }
 
-std::string BConnection::Recv()
+void BConnection::HandleWrite()
+{
+    if(_epos <= _spos)//没有要发送的数据
+    {
+        return;
+    }
+
+    idletimes = 0;
+    int iResult = 0;
+    char *pSendbuf = &_sendbuf[0] + _spos;
+    iResult = incInstance()->sendI(_socket, pSendbuf, (_epos - _spos), 0);
+    if (iResult == SOCKET_ERROR)
+    {
+        printf("send failed with error: %d\n", WSAGetLastError());
+        return;
+    }
+    _spos += iResult;
+}
+
+void BConnection::sendData(IDtype id, const void *buf, const msgtype mt, const size_t datalen)
+{
+    if (buf == nullptr)
+    {
+        return;
+    }
+
+    size_t len = datalen + NODE_COMMON_MSG_LEN + sizeof(msgidentfy);
+
+    BNODE_MSG *msg = (BNODE_MSG *)allocBNodeMsg(len);
+    if (msg == nullptr)
+    {
+        return;
+    }
+    msg->msgid = mt;
+    msg->msglen = datalen;
+
+    memcpy_s(msg->data, len, buf, len);                                            //拷贝消息内容
+    memcpy_s(msg->data + len, sizeof(msgidentfy), msgidentfy, sizeof(msgidentfy)); //加入消息尾标识
+}
+
+void BConnection::handle(const void *buf, size_t len)
+{
+    BNODE_MSG *pMsg = (BNODE_MSG *)buf;
+    if(pMsg->msglen + NODE_COMMON_MSG_LEN != len)//消息不合法. 
+    {
+        return;
+    }
+    if(_owner == nullptr)
+    {
+        return;
+    }
+    _owner->ReceiveMessage(pMsg);
+}
+
+void BConnection::Parse()
+{
+    size_t pos = 0;
+    char *bpos = (char *)_revdata;
+    size_t datalen = &_recvbuf[0] + _recvbufpos - _revdata;
+    Trace("datalen is %u", datalen);
+    do
+    {
+        int ret = memcmp(bpos + pos, msgidentfy, sizeof(msgidentfy));
+        if (ret == 0) //找到消息结束标识符
+        {
+            _recvmsgcount++;
+            handle(_revdata, bpos + pos - _revdata);
+            pos += sizeof(msgidentfy);
+            _revdata += pos;
+        }
+        else
+        {
+            ++pos;
+        }
+    } while (pos + sizeof(msgidentfy) <= datalen);
+}
+
+void BConnection::Recv()
 {
     idletimes = 0;
-    char recvbuf[DEFAULT_BUFLEN];
     int iResult = 0;
-    std::string ret;
+    int recvcount = 0;
+
+    char *buf = &_recvbuf[0] + _recvbufpos;
+
+    int buflen = recvbuflen - _recvbufpos;
+
+    if (buflen < recvbufthreshold) //小于阈值，开始整理缓冲区
+    {
+        size_t datalen = &_recvbuf[0] + _recvbufpos - _revdata;
+        errno_t e = memmove_s(&_recvbuf[0], recvbuflen, _revdata, datalen);
+        if (e != 0)
+        {
+            Trace("memmove_s error.");
+            return;
+        }
+        _revdata = &_recvbuf[0];
+        _recvbufpos = datalen;
+    }
+
     // Receive until the peer closes the connection
     do
     {
-        iResult = recv(_socket, recvbuf, recvbuflen, 0);
+        iResult = incInstance()->recvI(_socket, buf, buflen, 0);
         if (iResult > 0)
         {
-            std::string t;
-            t.assign(recvbuf, iResult);
-            ret += t;
+            buf += iResult;
+            buflen -= iResult;
+            recvcount += iResult;
         }
         else if (iResult == 0)
         {
@@ -108,53 +219,21 @@ std::string BConnection::Recv()
             _state = eDisconnect;
         }
     } while (iResult > 0);
-    
-    return ret;
-}
 
-int BConnection::HandleWrite()
-{
-    idletimes = 0;
-    int iResult = 0;
-    do
+    Trace("reiceive %d\n", recvcount);
+
+    _recvbufpos += recvcount;
+
+    if (recvcount > 0)
     {
-        iResult = send(_socket, (const char *)&_sendbuf[_pos], _sendbuf_size, 0);
-        if (iResult == SOCKET_ERROR)
-        {
-            printf("send failed with error: %d\n", WSAGetLastError());
-            break;
-        }
-        _pos += iResult;
-        _sendbuf_size -= iResult;
-        if (_sendbuf_size <= 0)
-        {
-            break;
-        }
-    } while (iResult > 0 & _sendbuf_size > 0);
-
-    memmove_s((void *)&_sendbuf[0], send_buf_max, (char *)&_sendbuf[0] + _pos, _sendbuf_size);
-    _pos = 0;
-
-    return iResult;
+        Parse();
+    }
 }
 
 void BConnection::HandleError()
 {
 }
 
-void BConnection::Disconnect()
-{
-    // shutdown the connection since no more data will be sent
-    int iResult = shutdown(_socket, SD_SEND);
-    if (iResult == SOCKET_ERROR)
-    {
-        printf("shutdown failed with error: %d\n", WSAGetLastError());
-        closesocket(_socket);
-        return;
-    }
-}
-
 void BConnection::toString()
 {
-    printf("ID:{%s}, server:{%s}, port:{%s}, pos:{%d}, sendbuf_size{%d}, state:{%d}, socket:{%d}\n", _id.c_str(), _server.c_str(), _port.c_str(), _pos, _sendbuf_size, _state, _socket);
 }

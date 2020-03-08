@@ -9,80 +9,36 @@
 #include <iostream>
 #include <sstream>
 #include <time.h>
+#include <math.h>
+#include <algorithm>
+
 
 extern sem_t app_sem;
 
-#pragma comment(lib, "Ws2_32.lib")
 
-unsigned __stdcall StartRecvT(void *para)
-{
-    BNode *p = (BNode *)(para);
-    if (p == nullptr)
-    {
-        printf("fatal error 02.\n");
-        return -1;
-    }
-    p->Proc();
-    return 0;
-}
-
-unsigned __stdcall StartListenT(void *p)
-{
-    BNode *pserverins = (BNode *)p;
-    if (pserverins == nullptr)
-    {
-        return -1;
-    }
-    pserverins->StartListen();
-    return 0;
-}
-
-void BNode::Start()
-{
-    int iResult;
-
-    WSADATA wsaData;
-
-    // Initialize Winsock
-    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0)
-    {
-        printf("WSAStartup failed: %d\n", iResult);
-        return;
-    }
-
-    unsigned ret;
-    sem_wait(&app_sem);
-    _beginthreadex(0, 0, StartRecvT, (void *)this, 0, &ret);
-    sem_wait(&app_sem);
-    _beginthreadex(0, 0, StartListenT, (void *)this, 0, &ret);
-    sem_wait(&app_sem);
-    printf("Node started.\n");
-}
 
 BNode::BNode(/* args */) : _predecessor(INVALID_NODEID), _successor(INVALID_NODEID)
 {
     srand(time(NULL));
     std::stringstream ss;
-    ss << rand() % 40000 + 10000;
-    _listen_port = ss.str();
 
-    _id = _listen_port;
+    _id = rand() % 40000 + 10000;
+
+    ss << _id;
 
     _successor = _id;
     _predecessor = _id;
 
-    _nodefuncmap["successorReq"] = &BNode::handleSuccessorReq;
-    _nodefuncmap["successorRsq"] = &BNode::handleSuccessorRsp;
-    _nodefuncmap["joinReq"] = &BNode::handleJoinReq;
-    _nodefuncmap["joinRsp"] = &BNode::handleJoinPsp;
-    _nodefuncmap["StabilizeReq"] = &BNode::handleStabilizeReq;
-    _nodefuncmap["StabilizeRsp"] = &BNode::handleStabilizeRsp;
+    _nodefuncmap[successor_req] = (NodeFunc)&BNode::handleSuccessorReq;
+    _nodefuncmap[successor_rsp] = (NodeFunc)&BNode::handleSuccessorRsp;
+    _nodefuncmap[join_req] = (NodeFunc)&BNode::handleJoinReq;
+    _nodefuncmap[join_rsp] = (NodeFunc)&BNode::handleJoinPsp;
+    _nodefuncmap[stabilize_req] = (NodeFunc)&BNode::handleStabilizeReq;
+    _nodefuncmap[stabilize_rsp] = (NodeFunc)&BNode::handleStabilizeRsp;
 }
 
 BNode::~BNode()
 {
-    Close();
 }
 
 BNode *BNode::instance()
@@ -91,110 +47,43 @@ BNode *BNode::instance()
     return &ins;
 }
 
-IDtype BNode::getIdentify(const std::string s)
-{
-    unsigned int id = RSHash(s);
-    std::stringstream ss;
-    ss << id;
-    return ss.str();
-}
-
-void BNode::handleSuccessorReq(BConnection *conn, const std::string &s)
-{
-    Trace("Handle successor request.");
-    std::string id = s;
-    std::string rsp;
-    if (_id < id && id < _successor)
-    {
-        rsp = "successorRsq " + _successor;
-        sendData(id, rsp);
-    }
-    else if (_id > _successor) //ring is end. response this node id.
-    {
-        rsp = "successorRsq " + _successor;
-        sendData(id, rsp);
-    }
-    else if (_id == _successor)
-    {
-        rsp = "successorRsq " + _successor;
-        sendData(id, rsp);
-    }
-    else
-    {
-        rsp = "successorReq " + id;
-        sendData(_successor, rsp);
-    }
-}
-
-void BNode::handleSuccessorRsp(BConnection *conn, const std::string &s)
-{
-    Trace("Handle successor response, successor {%s}", s.c_str());
-    join(s);
-}
-
-void BNode::handleJoinReq(BConnection *conn, const std::string &s)
-{
-    Trace("Handle join request.");
-
-    if (_id == _successor)
-    {
-        _successor = s;
-    }
-    std::string sRsp = "joinRsp " + _id + "%" + _predecessor;
-
-    _predecessor = s;
-
-    _state = eOnLine;
-
-    conn->SendData(sRsp);
-}
-
-void BNode::handleJoinPsp(BConnection *conn, const std::string &s)
-{
-    Trace("Handle join rsponse.");
-    std::vector<std::string> paras;
-
-    strsplit(s, '%', paras);
-
-    if (paras.size() != 2)
-    {
-        printf("invalid paras.\n");
-        return;
-    }
-    _successor = paras[0];
-    _predecessor = paras[1];
-    _state = eOnLine;
-    Trace("Join sunncessful.");
-}
-
-void BNode::handleStabilizeReq(BConnection *conn, const std::string &s)
-{
-    Trace("Handle Stabilize request.");
-    std::string sRsp = "StabilizeRsp " + _predecessor;
-    conn->SendData(sRsp);
-}
-
-void BNode::handleStabilizeRsp(BConnection *conn, const std::string &s)
-{
-    IDtype id = s;
-    if (id.compare(_id) != 0) //New node joined, change the successor.
-    {
-        Trace("New node join, change successor.{%s},{%s}", id.c_str(), _id.c_str());
-        _successor = id;
-    }
-    Trace("Stabilize successful.");
-}
-
 void BNode::StartJoin(IDtype id)
 {
-    std::string msg = "successorReq " + _id;
-    sendData(id, msg);
+
+}
+
+void BNode::handleSuccessorReq(const BNODE_MSG *msg)
+{
+    Trace("Handle successor request.");
+}
+
+void BNode::handleSuccessorRsp(const BNODE_MSG *msg)
+{
+
+}
+
+void BNode::handleJoinReq(const BNODE_MSG *msg)
+{
+
+}
+
+void BNode::handleJoinPsp(const BNODE_MSG *msg)
+{
+
+}
+
+void BNode::handleStabilizeReq(const BNODE_MSG *msg)
+{
+
+}
+
+void BNode::handleStabilizeRsp(const BNODE_MSG *msg)
+{
+
 }
 
 void BNode::join(IDtype id)
 {
-    std::string msg = "joinReq " + _id;
-    sendData(id, msg);
 }
 
 void BNode::exit()
@@ -203,372 +92,64 @@ void BNode::exit()
 
 void BNode::stabilization()
 {
-    if (_state != eOnLine)
-    {
-        return;
-    }
-    std::string msg = "StabilizeReq " + _id;
-    sendData(_successor, msg);
-}
-
-void BNode::sendData(IDtype id, const std::string &msg)
-{
-    SOCKET st = Connect(id);
-    if (st == INVALID_SOCKET)
-    {
-        Trace("Socket invalid.");
-        return;
-    }
-    BConnection *pconn = new BConnection(st);
-    if (pconn == nullptr)
-    {
-        printf("New BConnection failed with error %d\n", WSAGetLastError());
-        return;
-    }
-    connSoc.insert(pconn);
-    pconn->SendData(msg);
 }
 
 void BNode::Show()
 {
-    Trace("LocalNode:{%s}\n", _listen_port.c_str());
-    sockaddr_in peeraddr;
-    int size = sizeof(peeraddr);
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
-    {
-        (*it)->toString();
-    }
-    Trace("Predecessor: {%s}, Successor: {%s}", _predecessor.c_str(), _successor.c_str());
+    Trace("LocalNode:{%u}\n", _id);
+    Trace("Predecessor: {%u}, Successor: {%s}", _predecessor, _successor);
 }
 
-bool BNode::StartListen()
+IDtype BNode::findSuccessor(IDtype id)
 {
-    struct addrinfo *result = NULL, *ptr = NULL, hints;
+    return INVALID_NODEID;
+}
 
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_PASSIVE;
-
-    // Resolve the local address and port to be used by the server
-    int iResult = getaddrinfo(NULL, _listen_port.c_str(), &hints, &result);
-    if (iResult != 0)
+//_fingertable[i] = findSuccessor((_id + Power(2, i))% RING_BIT_SIZE);
+void BNode::fixFingerTable()
+{
+    for (int i = 0; i < RING_BIT_SIZE; ++i)
     {
-        printf("getaddrinfo failed: %d\n", iResult);
-        WSACleanup();
-        return false;
-    }
-
-    _listen_addr = (struct sockaddr_in *)result->ai_addr;
-    printf("start to listen on address %s:%u\n", inet_ntoa(_listen_addr->sin_addr), ntohs(_listen_addr->sin_port));
-
-    ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (ListenSocket == INVALID_SOCKET)
-    {
-        printf("Error at socket(): %ld\n", WSAGetLastError());
-        freeaddrinfo(result);
-        WSACleanup();
-        return 1;
-    }
-    // Setup the TCP listening socket
-    iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
-    if (iResult == SOCKET_ERROR)
-    {
-        printf("bind failed with error: %d\n", WSAGetLastError());
-        freeaddrinfo(result);
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 1;
-    }
-
-    freeaddrinfo(result);
-
-    if (listen(ListenSocket, SOMAXCONN) == SOCKET_ERROR)
-    {
-        printf("Listen failed with error: %ld\n", WSAGetLastError());
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 1;
-    }
-
-    sem_post(&app_sem);
-
-    socklen_t len;
-    struct sockaddr_storage addr;
-    u_short port;
-    char ipstr[INET6_ADDRSTRLEN];
-
-    len = sizeof addr;
-    while (true)
-    {
-        // Accept a client socket
-        SOCKET ClientSocket = accept(ListenSocket, (struct sockaddr *)&addr, &len);
-        if (ClientSocket == INVALID_SOCKET)
+        IDtype rec = pow(2, i);
+        IDtype next = INVALID_NODEID;
+        if (std::numeric_limits<IDtype>::max() - rec > _id)
         {
-            printf("accept failed with error: %d\n", WSAGetLastError());
-            closesocket(ListenSocket);
-            WSACleanup();
-            return 1;
+            next = pow(2, i) - (std::numeric_limits<IDtype>::max() - _id);
         }
-        // set to noblock mode
-        ULONG NonBlock = 1;
-        if (ioctlsocket(ClientSocket, FIONBIO, &NonBlock) == SOCKET_ERROR)
+        else
         {
-            printf("ioctlsocket() failed with error %d\n", WSAGetLastError());
-            closesocket(ClientSocket);
-            return false;
+            next = _id + rec;
         }
 
-        char saddr[INET6_ADDRSTRLEN] = {0};
-
-        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
-
-        Trace("Client from %s:%d connected.", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
-
-        BConnection *pconn = new BConnection(ClientSocket);
-        if (pconn == nullptr)
+        _fingertable[i] = findSuccessor(next);
+        if (_fingertable[i] == _id) //第一个后继节点是自己的
         {
-            printf("New BConnection failed with error %d\n", WSAGetLastError());
+            break;
+        }
+    }
+    for (int i = i + 1; i < RING_BIT_SIZE; i++) //后续每一个后继节点都是此节点
+    {
+        _fingertable[i] = _id;
+    }
+}
+
+IDtype BNode::getClosestNodeInFingerTable(IDtype id)
+{
+    for (int i = RING_BIT_SIZE - 1; i >= 0; i--) //倒序查找，先大范围查找。
+    {
+        if (_fingertable[i] == INVALID_NODEID)
+        {
             continue;
         }
-        connSoc.insert(pconn);
-    }
-}
-
-SOCKET BNode::Connect(const std::string &server, const std::string &port)
-{
-    struct addrinfo *result = NULL,
-                    *ptr = NULL,
-                    hints;
-
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    // Resolve the server address and port
-    int iResult = getaddrinfo(server.c_str(), port.c_str(), &hints, &result);
-    if (iResult != 0)
-    {
-        printf("getaddrinfo failed with error: %d\n", iResult);
-        return INVALID_SOCKET;
-    }
-
-    struct sockaddr_in *addr;
-    addr = (struct sockaddr_in *)result->ai_addr;
-
-    SOCKET st = INVALID_SOCKET;
-    // Attempt to connect to an address until one succeeds
-    for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
-    {
-        // Create a SOCKET for connecting to server
-        st = socket(ptr->ai_family, ptr->ai_socktype,
-                    ptr->ai_protocol);
-        if (st == INVALID_SOCKET)
-        {
-            printf("socket failed with error: %ld\n", WSAGetLastError());
-            return false;
-        }
-
-        // Connect to server.
-        iResult = connect(st, ptr->ai_addr, (int)ptr->ai_addrlen);
-        if (iResult == SOCKET_ERROR)
-        {
-            closesocket(st);
-            continue;
-        }
-        break;
-    }
-
-    freeaddrinfo(result);
-
-    if (st == INVALID_SOCKET)
-    {
-        printf("Unable to connect to server!\n");
-        closesocket(st);
-        return false;
-    }
-
-    // set to noblock mode
-    ULONG NonBlock = 1;
-    if (ioctlsocket(st, FIONBIO, &NonBlock) == SOCKET_ERROR)
-    {
-        printf("ioctlsocket() failed with error %d\n", WSAGetLastError());
-        closesocket(st);
-        return INVALID_SOCKET;
-    }
-
-    Trace("Connect to %s:%s ok.\n", server.c_str(), port.c_str());
-    return st;
-}
-
-void BNode::check()
-{
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end();)
-    {
-        (*it)->Idle();
-        if ((*it)->IsTimeout())
-        {
-            Trace("Time out.");
-            (*it)->Disconnect();
-            delete *it;
-            connSoc.erase(it++);
-        }
-        else
-        {
-            ++it;
-        }
-    }
-}
-
-FD_SET BNode::getFdSet()
-{
-    FD_SET fds_;
-    FD_ZERO(&fds_);
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
-    {
-        FD_SET((*it)->GetSocket(), &fds_);
-    }
-    return fds_;
-}
-
-FD_SET BNode::getWriteSet()
-{
-    FD_SET fds_;
-    FD_ZERO(&fds_);
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
-    {
-        if ((*it)->SendBufSize() > 0 && (*it)->GetState() == eConnected)
-        {
-            FD_SET((*it)->GetSocket(), &fds_);
-        }
-    }
-    return fds_;
-}
-
-void BNode::handleReadSockets(FD_SET fds)
-{
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end();)
-    {
-        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
-        {
-            std::string s = (*it)->Recv();
-            Trace(s.c_str());
-            if (s.length() > 0)
-            {
-                parse(*it, s);
-            }
-        }
-        if ((*it)->GetState() == eDisconnect)
-        {
-            connSoc.erase(it++);
-        }
-        else
-        {
-            ++it;
-        }
-    }
-}
-
-void BNode::handleWriteSocket(FD_SET fds)
-{
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
-    {
-        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
-        {
-            (*it)->HandleWrite();
-        }
-    }
-}
-
-void BNode::handleErrorSocket(FD_SET fds)
-{
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
-    {
-        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
-        {
-            (*it)->HandleError();
-        }
-    }
-}
-
-void BNode::Close()
-{
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
-    {
-        int iResult = shutdown((*it)->GetSocket(), SD_BOTH);
-        if (iResult == SOCKET_ERROR)
-        {
-            printf("shutdown failed with error: %d\n", WSAGetLastError());
-            closesocket((*it)->GetSocket());
-            return;
-        }
-        delete *it;
-    }
-    connSoc.clear();
-}
-
-void BNode::parse(BConnection *conn, const std::string &line)
-{
-    std::vector<std::string> paras;
-    std::string funcname;
-    strsplit(line, funcname, paras);
-    if (funcname.empty())
-    {
-        return;
-    }
-    std::map<std::string, NodeFunc>::iterator pos = _nodefuncmap.find(funcname);
-    if (pos == _nodefuncmap.end())
-    {
-        Trace("Invalid command.");
-        return;
-    }
-
-    NodeFunc func = pos->second;
-
-    (this->*func)(conn, paras[0]);
-}
-
-void BNode::Proc()
-{
-    TIMEVAL tval;
-    tval.tv_sec = 1;
-    tval.tv_usec = 0;
-    int ret = 0;
-    _start = true;
-
-    int count = 0;
-
-    sem_post(&app_sem);
-    while (_start)
-    {
-        FD_SET fds_r = getFdSet();
-        FD_SET fds_w = getWriteSet();
-        FD_SET fds_e = getFdSet();
-        ret = select(0, &fds_r, (fd_set *)&fds_w, (fd_set *)&fds_e, &tval);
-        if (ret == SOCKET_ERROR)
-        {
-            Sleep(10000);
-        }
-        else if (ret == 0)
-        {
-            Sleep(1000);
-        }
-        else
+        if (_fingertable[i] == _id)
         {
             /* code */
-            handleReadSockets(fds_r);
-            handleWriteSocket(fds_w);
-            handleErrorSocket(fds_e);
+            continue;
         }
-        check();
+        if (id < _fingertable[i] && _fingertable[i] < _id)
+        {
+            return _fingertable[i];
+        }
     }
-    Close();
-}
-
-//////////////////
-SOCKET BNode::Connect(IDtype id)
-{
-    return Connect("192.168.1.81", id);
+    return _successor;
 }

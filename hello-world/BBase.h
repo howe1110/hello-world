@@ -5,6 +5,11 @@
 #include <map>
 #include <sstream>
 #include <vector>
+#include "network.h"
+
+
+void SetincInstance(network* p);
+network* incInstance();
 
 class BBase
 {
@@ -28,3 +33,4 @@ public:
 private:
     bool _traceswitch;
 };
+

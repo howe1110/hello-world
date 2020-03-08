@@ -1,12 +1,15 @@
 #pragma once
+
 #include "BConnect.h"
 #include "BBase.h"
 #include <vector>
 #include <queue>
 #include <set>
 #include <map>
+#include <mutex>
 
-typedef std::string IDtype;
+//protoc --proto_path=./ --cpp_out=./ ./proto/Node.proto
+typedef unsigned int IDtype;
 
 enum NodeState
 {
@@ -15,78 +18,65 @@ enum NodeState
     eOnLine
 };
 
-
-const IDtype INVALID_NODEID = "0";
-
-class BNode : public BBase
+struct nodeinfo
 {
-    typedef void (BNode::*NodeFunc)(BConnection*, const std::string&);
+    unsigned int nodeid;
+    std::string address;
+    std::string port;
+};
 
+struct successorReq
+{
+    nodeinfo node;
+};
+
+const IDtype INVALID_NODEID = 0;
+const unsigned int RING_BIT_SIZE = 32;
+
+class BNode : public CNode
+{   
 private:
     /* data */
 public:
     BNode(/* args */);
     ~BNode();
-
 public:
     static BNode *instance();
-
 public:
     void Start();
-
-public:
-    bool StartListen();
-    void Proc();
-    void Close();
-    void parse(BConnection* conn, const std::string &line);
-    SOCKET Connect(const std::string &server, const std::string &port);
-
+    
 public:
     void Show();
 
 public:
-    void handleSuccessorReq(BConnection* conn, const std::string &s);
-    void handleSuccessorRsp(BConnection* conn, const std::string &s);
-    void hanldeAskPredecessorReq(BConnection* conn, const std::string &s);
-    void hanldeAskPredecessorRsp(void *msg);
-    void handleJoinReq(BConnection* conn, const std::string &s);
-    void handleJoinPsp(BConnection* conn, const std::string &s);
-    void handleStabilizeReq(BConnection* conn, const std::string &s);
-    void handleStabilizeRsp(BConnection* conn, const std::string &s);
+    virtual void handleSuccessorReq(const BNODE_MSG *msg);
+    virtual void handleSuccessorRsp(const BNODE_MSG *msg);
+    virtual void handleJoinReq(const BNODE_MSG *msg);
+    virtual void handleJoinPsp(const BNODE_MSG *msg);
+    virtual void handleStabilizeReq(const BNODE_MSG *msg);
+    virtual void handleStabilizeRsp(const BNODE_MSG *msg);
 
 public:
-    SOCKET Connect(IDtype id);
     void StartJoin(IDtype id);
     void join(IDtype id);
     void exit();
     void stabilization();
-    void sendData(IDtype id, const std::string &msg);
 
 private:
     IDtype _predecessor;
     IDtype _successor;
 
 private:
-    FD_SET getFdSet();
-    FD_SET getWriteSet();
-    void handleReadSockets(FD_SET fds);
-    void handleWriteSocket(FD_SET fds);
-    void handleErrorSocket(FD_SET fds);
-    IDtype getIdentify(const std::string s);
     void check();
-
-private:
-    SOCKET ListenSocket;
-    std::set<BConnection*> connSoc;
-    struct sockaddr_in *_listen_addr;
-    std::string _listen_port;
+    IDtype findSuccessor(IDtype);
+    void fixFingerTable();
+    IDtype getClosestNodeInFingerTable(IDtype id);
 
 public:
     IDtype _id;
     std::string _name;
+    std::map<unsigned int, IDtype> _fingertable;
 
 private:
-    bool _start;
     NodeState _state;
-    std::map<std::string, NodeFunc> _nodefuncmap;
 };

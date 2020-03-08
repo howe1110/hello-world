@@ -1,0 +1,42 @@
+syntax = "proto2";
+
+message nodeinfo {
+  required uint32 nodeid = 1;
+  required string address = 2;
+  required string port = 3;
+}
+
+message successorReq {
+  required nodeinfo node = 1;
+}
+
+message successorRsp {
+  required nodeinfo nxt = 1;
+}
+
+message joinReq {
+  required nodeinfo node = 1;
+}
+
+message joinRsp {
+  required nodeinfo nxt = 1;
+  required nodeinfo pre = 2;
+}
+
+message stabilizeReq {
+  required nodeinfo node = 1;
+}
+
+message stabilizeRsp {
+  required nodeinfo pre = 1;
+}
+
+
+
+
+
+
+
+
+
+

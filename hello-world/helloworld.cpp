@@ -5,12 +5,12 @@
 #include <sstream>
 
 #include "BNode.h"
+#include "tcpcomm.h"
 
 #include <semaphore.h>
 #include <windows.h>
 
 std::string promot = ">";
-IDtype cur_node = "";
 
 const std::string guidenodeip = "192.168.1.81";
 const std::string guidenodeport = "27015";
@@ -64,33 +64,6 @@ void connect2NodeDFunc(const std::vector<std::string> &paras)
     }
     std::string host = paras[0];
     std::string port = paras[1];
-    BNode::instance()->Connect(host, port);
-}
-
-void send2NodeDFunc(const std::vector<std::string> &paras)
-{
-    if (paras.size() != 1)
-    {
-        std::cout << "Invalid parameters." << std::endl;
-        return;
-    }
-    if (cur_node.empty())
-    {
-        std::cout << "please switch to node." << std::endl;
-        return;
-    }
-    std::cout << "send2NodeDFunc:" << paras[0] << std::endl;
-}
-
-void switch2NodeDFunc(const std::vector<std::string> &paras)
-{
-    if (paras.size() != 1)
-    {
-        std::cout << "Invalid parameters." << std::endl;
-        return;
-    }
-    cur_node = paras[0];
-    promot = cur_node + promot;
 }
 
 void dispNodeDFunc(const std::vector<std::string> &paras)
@@ -118,7 +91,7 @@ void joinFunc(const std::vector<std::string> &paras)
         std::cout << "Invalid parameters." << std::endl;
         return;
     }
-    IDtype node = paras[0];
+    IDtype node = 0;
     BNode::instance()->StartJoin(node);
 }
 
@@ -133,6 +106,7 @@ void startFunc(const std::vector<std::string> &paras)
 
 sem_t app_sem;
 
+
 bool initialize()
 {
     int err = sem_init(&app_sem, 0, 1);
@@ -141,14 +115,22 @@ bool initialize()
         std::cout << "initialize semaphore failed." << std::endl;
         return false;
     }
+    network* nw = new tcpcomm();
+    if(nw == nullptr)
+    {
+        std::cout << "initialize incinstance failed." << std::endl;
+        return false;
+    }
+
+    SetincInstance(nw);
+
     funcmap["conn"] = connect2NodeDFunc;
-    funcmap["switch"] = switch2NodeDFunc;
-    funcmap["send"] = send2NodeDFunc;
     funcmap["shownode"] = dispNodeDFunc;
     funcmap["trace"] = TraceNodeDFunc;
     funcmap["??"] = dispHelp;
     funcmap["join"] = joinFunc;
     funcmap["check"] = checkFunc;
+
     return true;
 }
 

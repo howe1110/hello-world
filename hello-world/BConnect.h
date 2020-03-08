@@ -4,6 +4,9 @@
 #include <string>
 #include <vector>
 
+
+typedef unsigned int IDtype;
+
 enum ConnState
 {
     eDisconnect,
@@ -11,31 +14,59 @@ enum ConnState
     eConnected
 };
 
-const std::size_t send_buf_max = 65536;
+enum msgtype
+{
+    successor_req = 0,
+    successor_rsp,
+    join_req,
+    join_rsp,
+    stabilize_req,
+    stabilize_rsp
+};
+
+typedef struct BNODE_MSG
+{
+    size_t msglen;
+    unsigned short msgid;
+    char data[0];
+}*PBNODE_MSG;
+
+
+
+const size_t NODE_COMMON_MSG_LEN = sizeof(BNODE_MSG);
+
+const std::size_t send_buf_max = 4096;
 const std::string shakehand = "hello server.";
+const char msgidentfy[4] = {0x1e, 0x1e, 0x1e, 0x1e};
 
 const int maxidletimes = 10;
 
-#define DEFAULT_BUFLEN 512
+typedef (*MessageHandleFunc)(PBNODE_MSG pMsg);
+
+class CNode;
 
 class BConnection : BBase
 {
 private:
     /* data */
 public:
-    BConnection(){};
-    BConnection(SOCKET s);
+    BConnection();
+    BConnection(SOCKET s, CNode *own);
     BConnection(const BConnection &r);
     virtual ~BConnection();
-
+    public:
 public:
-    int SendData(const std::string &s);
-
+    void *allocBNodeMsg(size_t len);
+    void sendData(IDtype id, const void *buf, const msgtype mt, const size_t datalen);
 public:
-    std::string Recv();
-    int HandleWrite();
+    void Recv();
+    void HandleWrite();
     void HandleError();
-    void Disconnect();
+    //
+    int GetBufPos();
+    char* GetDataPos();
+    void Parse();
+    void handle(const void *buf, size_t pos);
 
 public:
     void toString();
@@ -45,15 +76,14 @@ public:
     ConnState GetState() const;
     int SendBufSize() const;
     bool CanWrite() const;
-    std::string GetID() const;
     bool IsTimeout();
     void Idle();
 
 private:
-    SOCKET _socket;
-
+    CNode *_owner;
 private:
-    std::string _id;
+    SOCKET _socket;
+private:
     std::string _server;
     std::string _port;
     ConnState _state;
@@ -61,8 +91,16 @@ private:
 
 private:
     std::vector<char> _sendbuf;
-    int _pos;
-    int _sendbuf_size;
+    int _epos;
+    int _spos;
+    const static int sendbufthreshold = 1024;
+    //
     bool _initized;
-    const int recvbuflen = DEFAULT_BUFLEN;
+    const static int recvbuflen = 4096;
+    const static int recvbufthreshold = 1024;
+    std::vector<char> _recvbuf;
+    char* _revdata;
+    int _recvbufpos;
+private:
+    size_t _recvmsgcount;//接收到的消息数量
 };
