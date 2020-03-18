@@ -55,17 +55,6 @@ void proc(const std::string &line)
     func(paras);
 }
 
-void connect2NodeDFunc(const std::vector<std::string> &paras)
-{
-    if (paras.size() != 2)
-    {
-        std::cout << "Invalid parameters." << std::endl;
-        return;
-    }
-    std::string host = paras[0];
-    std::string port = paras[1];
-}
-
 void dispNodeDFunc(const std::vector<std::string> &paras)
 {
     BNode::instance()->Show();
@@ -86,13 +75,12 @@ void dispHelp(const std::vector<std::string> &paras)
 
 void joinFunc(const std::vector<std::string> &paras)
 {
-    if (paras.size() != 1)
+    if (paras.size() != 2)
     {
         std::cout << "Invalid parameters." << std::endl;
         return;
     }
-    IDtype node = 0;
-    BNode::instance()->StartJoin(node);
+    BNode::instance()->StartJoin(paras[0], paras[1]);
 }
 
 void checkFunc(const std::vector<std::string> &paras)
@@ -124,7 +112,6 @@ bool initialize()
 
     SetincInstance(nw);
 
-    funcmap["conn"] = connect2NodeDFunc;
     funcmap["shownode"] = dispNodeDFunc;
     funcmap["trace"] = TraceNodeDFunc;
     funcmap["??"] = dispHelp;

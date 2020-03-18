@@ -47,37 +47,42 @@ BNode *BNode::instance()
     return &ins;
 }
 
-void BNode::StartJoin(IDtype id)
+void BNode::Start()
 {
-
+    CNode::Start();
 }
 
-void BNode::handleSuccessorReq(const BNODE_MSG *msg)
+void BNode::StartJoin(const std::string &server, const std::string &port)
+{
+    Connect(server, port);
+}
+
+void BNode::handleSuccessorReq(const txmsg *msg)
 {
     Trace("Handle successor request.");
 }
 
-void BNode::handleSuccessorRsp(const BNODE_MSG *msg)
+void BNode::handleSuccessorRsp(const txmsg *msg)
 {
 
 }
 
-void BNode::handleJoinReq(const BNODE_MSG *msg)
+void BNode::handleJoinReq(const txmsg *msg)
 {
 
 }
 
-void BNode::handleJoinPsp(const BNODE_MSG *msg)
+void BNode::handleJoinPsp(const txmsg *msg)
 {
 
 }
 
-void BNode::handleStabilizeReq(const BNODE_MSG *msg)
+void BNode::handleStabilizeReq(const txmsg *msg)
 {
 
 }
 
-void BNode::handleStabilizeRsp(const BNODE_MSG *msg)
+void BNode::handleStabilizeRsp(const txmsg *msg)
 {
 
 }

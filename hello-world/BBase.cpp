@@ -10,6 +10,15 @@ void SetincInstance(network* p)
     nw = p;
 }
 
+void ResetincInstance()
+{
+    if(nw != nullptr)
+    {
+        delete nw;
+        nw = nullptr;
+    }
+}
+
 network* incInstance()
 {
     if(nw == nullptr)

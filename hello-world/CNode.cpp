@@ -1,6 +1,6 @@
 #include "CNode.h"
 #include <ws2tcpip.h>
-
+#include <thread>
 #include <semaphore.h>
 
 extern sem_t app_sem;
@@ -14,6 +14,7 @@ unsigned __stdcall StartRecvT(void *para)
         printf("fatal error 02.\n");
         return -1;
     }
+    sem_post(&app_sem);
     p->Proc();
     return 0;
 }
@@ -25,6 +26,7 @@ unsigned __stdcall StartListenT(void *p)
     {
         return -1;
     }
+    sem_post(&app_sem);
     pserverins->StartListen();
     return 0;
 }
@@ -36,18 +38,18 @@ unsigned __stdcall StartProcMessageT(void *p)
     {
         return -1;
     }
+    sem_post(&app_sem);
     pserverins->ProcMessage();
     return 0;
 }
 
 CNode::CNode()
 {
-
+    _nodefuncmap[msgtype_shakehand] = (NodeFunc)&CNode::handleShakehand;
 }
 
 CNode::~CNode()
 {
-
 }
 
 bool CNode::Initialize()
@@ -84,20 +86,23 @@ void CNode::ProcMessage()
 {
     while (isRunning())
     {
-        PBNODE_MSG msg;
+        ptxmsg msg;
         _msgqueue.read(msg, 1);
-        handleMessage(msg);
+        if(msg != nullptr)
+        {
+            handleMessage(msg);
+        }
     }
 }
 
-void CNode::handleMessage(BNODE_MSG *pMsg)
+void CNode::handleMessage(ptxmsg pMsg)
 {
-    if(pMsg == nullptr)
+    if (pMsg == nullptr)
     {
         return;
     }
     std::map<unsigned int, NodeFunc>::iterator pos = _nodefuncmap.find(pMsg->msgid);
-    if(pos == _nodefuncmap.end())
+    if (pos == _nodefuncmap.end())
     {
         Trace("Invalid message id.");
         return;
@@ -106,18 +111,33 @@ void CNode::handleMessage(BNODE_MSG *pMsg)
     (this->*func)(pMsg);
 }
 
-void CNode::ReceiveMessage(PBNODE_MSG pMsg)
+void CNode::ReceiveMessage(ptxmsg pMsg)
 {
-    _msgqueue.write(pMsg);
+    _msgqueue.write(txmsg::Clone(pMsg));
+}
+
+void CNode::SendBMessage(size_t linkid, const msgtype mt, void *pData, size_t datalen)
+{
+    std::map<size_t, BConnectionPtr>::iterator pos = connSoc.find(linkid);
+    if(pos == connSoc.end())
+    {
+        return;
+    }
+    pos->second->sendData(linkid, pData, mt, datalen);
+}
+
+void CNode::handleShakehand(const ptxmsg msg)
+{
+    IDtype id = msg->sendid;
 }
 
 FD_SET CNode::getFdSet()
 {
     FD_SET fds_;
     FD_ZERO(&fds_);
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<size_t, BConnectionPtr>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        FD_SET((*it)->GetSocket(), &fds_);
+        FD_SET(it->second->GetSocket(), &fds_);
     }
     return fds_;
 }
@@ -126,11 +146,11 @@ FD_SET CNode::getWriteSet()
 {
     FD_SET fds_;
     FD_ZERO(&fds_);
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<size_t, BConnectionPtr>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        if ((*it)->SendBufSize() > 0 && (*it)->GetState() == eConnected)
+        if (it->second->SendBufSize() > 0 && it->second->GetState() == eConnected)
         {
-            FD_SET((*it)->GetSocket(), &fds_);
+            FD_SET(it->second->GetSocket(), &fds_);
         }
     }
     return fds_;
@@ -138,13 +158,20 @@ FD_SET CNode::getWriteSet()
 
 void CNode::handleReadSockets(FD_SET fds)
 {
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end();)
+    for (std::map<size_t, BConnectionPtr>::iterator it = connSoc.begin(); it != connSoc.end();)
     {
-        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
+        if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
         {
-            (*it)->Recv();
+            it->second->Recv();
+            ptxmsg pMsg = nullptr;
+            size_t len = 0;
+            while (it->second->Parse(&pMsg, len))
+            {
+                /* code */
+                ReceiveMessage(pMsg);
+            }
         }
-        if ((*it)->GetState() == eDisconnect)
+        if (it->second->GetState() == eDisconnect)
         {
             connSoc.erase(it++);
         }
@@ -157,58 +184,54 @@ void CNode::handleReadSockets(FD_SET fds)
 
 void CNode::handleWriteSocket(FD_SET fds)
 {
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<size_t, BConnectionPtr>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
+        if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
         {
-            (*it)->HandleWrite();
+            it->second->HandleWrite();
         }
     }
 }
 
 void CNode::handleErrorSocket(FD_SET fds)
 {
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<size_t, BConnectionPtr>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        if (FD_ISSET((*it)->GetSocket(), &fds) > 0)
+        if (FD_ISSET(it->second->GetSocket(), &fds) > 0)
         {
-            (*it)->HandleError();
+            it->second->HandleError();
         }
     }
 }
 
 void CNode::Close()
 {
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
+    for (std::map<size_t, BConnectionPtr>::iterator it = connSoc.begin(); it != connSoc.end(); ++it)
     {
-        int iResult = incInstance()->shutdownI((*it)->GetSocket(), SD_BOTH);
+        int iResult = incInstance()->shutdownI(it->second->GetSocket(), SD_BOTH);
         if (iResult == SOCKET_ERROR)
         {
             printf("shutdown failed with error: %d\n", WSAGetLastError());
-            incInstance()->closesocketI((*it)->GetSocket());
-            return;
+            incInstance()->closesocketI(it->second->GetSocket());
         }
-        delete *it;
     }
     connSoc.clear();
 }
 
 void CNode::check()
 {
-    for (std::set<BConnection *>::iterator it = connSoc.begin(); it != connSoc.end();)
+    for (std::map<size_t, BConnectionPtr>::iterator it = connSoc.begin(); it != connSoc.end();)
     {
-        (*it)->Idle();
-        if ((*it)->IsTimeout())
+        if (it->second->IsTimeout())
         {
             Trace("Time out.");
             // shutdown the connection since no more data will be sent
-            int iResult = incInstance()->shutdownI((*it)->GetSocket(), SD_SEND);
+            int iResult = incInstance()->shutdownI(it->second->GetSocket(), SD_SEND);
             if (iResult == SOCKET_ERROR)
             {
                 printf("shutdown failed with error: %d\n", WSAGetLastError());
-                incInstance()->closesocketI((*it)->GetSocket());
+                incInstance()->closesocketI(it->second->GetSocket());
             }
-            delete *it;
             connSoc.erase(it++);
         }
         else
@@ -228,14 +251,13 @@ void CNode::Proc()
 
     int count = 0;
 
-    sem_post(&app_sem);
     while (isRunning())
     {
         FD_SET fds_r = getFdSet();
         FD_SET fds_w = getWriteSet();
         FD_SET fds_e = getFdSet();
         ret = incInstance()->selectI(0, &fds_r, (fd_set *)&fds_w, (fd_set *)&fds_e, &tval);
-        if(ret > 0)
+        if (ret > 0)
         {
             handleReadSockets(fds_r);
             handleWriteSocket(fds_w);
@@ -247,6 +269,18 @@ void CNode::Proc()
         }
     }
     Close();
+}
+
+bool CNode::addConntion(SOCKET st)
+{
+    BConnectionPtr connPtr = txRefPtr<BConnection>(new BConnection(st));
+    if (connPtr.isNullPtr())
+    {
+        Trace("Error connPtr have null value.\n");
+        return false;
+    }
+    connSoc[connPtr->getId()] = connPtr;
+    return true;
 }
 
 void CNode::Connect(const std::string &server, const std::string &port)
@@ -301,19 +335,16 @@ void CNode::Connect(const std::string &server, const std::string &port)
     }
 
     incInstance()->freeaddrinfoI(result);
-
     if (st == INVALID_SOCKET)
     {
         printf("Unable to connect to server!\n");
         return;
     }
-    BConnection *pconn = new BConnection(st, this);
-    if (pconn == nullptr)
+    if (!addConntion(st))
     {
-        printf("New BConnection failed with error %d\n", WSAGetLastError());
-        return;
+        incInstance()->closesocketI(st);
+        Trace("Add connection failed %s:%s ok.\n", server.c_str(), port.c_str());
     }
-    connSoc.insert(pconn);
     Trace("Connect to %s:%s ok.\n", server.c_str(), port.c_str());
 }
 
@@ -334,7 +365,7 @@ void CNode::StartListen()
         printf("getaddrinfo failed: %d\n", iResult);
         return;
     }
-    if(result == nullptr)
+    if (result == nullptr)
     {
         printf("result is null.");
         return;
@@ -369,8 +400,6 @@ void CNode::StartListen()
         return;
     }
 
-    sem_post(&app_sem);
-
     socklen_t len;
     struct sockaddr_storage addr;
     u_short port;
@@ -395,19 +424,15 @@ void CNode::StartListen()
             continue;
         }
 
-        char saddr[INET6_ADDRSTRLEN] = {0};
-
-        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
-
-        Trace("Client from %s:%d connected.", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
-
-        BConnection *pconn = new BConnection(ClientSocket, this);
-        if (pconn == nullptr)
+        if (!addConntion(ClientSocket))
         {
-            printf("New BConnection failed with error %d\n", WSAGetLastError());
+            incInstance()->closesocketI(ClientSocket);
             continue;
         }
-        connSoc.insert(pconn);
+
+        char saddr[INET6_ADDRSTRLEN] = {0};
+        struct sockaddr_in *s = (struct sockaddr_in *)&addr;
+        Trace("Client from %s:%d connected.", inet_ntoa(s->sin_addr), ntohs(s->sin_port));
     }
     incInstance()->closesocketI(ListenSocket);
 }

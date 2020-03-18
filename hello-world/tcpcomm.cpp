@@ -38,7 +38,7 @@ int tcpcomm::listenI(SOCKET s, int backlog)
     return listen(s, backlog);
 }
 
-int tcpcomm::selectI(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const struct timeval *timeout)
+int tcpcomm::selectI(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
 {
     return select(nfds, readfds, writefds, exceptfds, timeout);
 }

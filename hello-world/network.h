@@ -15,7 +15,7 @@ public:
     virtual int ioctlsocketI(SOCKET s, long cmd, u_long *argp) = 0;
     virtual int bindI(SOCKET s, struct sockaddr FAR *name, int namelen) = 0;
     virtual int listenI(SOCKET s, int backlog) = 0;
-    virtual int selectI(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const struct timeval *timeout) = 0;
+    virtual int selectI(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout) = 0;
     virtual SOCKET acceptI(SOCKET s, struct sockaddr *addr, int *addrlen) = 0;
     virtual int connectI(SOCKET s, const struct sockaddr *name, int namelen) = 0;
     virtual int recvI(SOCKET s, char *buf, int len, int flags) = 0;

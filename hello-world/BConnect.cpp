@@ -9,15 +9,17 @@
 #include <iostream>
 #include <sstream>
 #include "network.h"
-#include "CNode.h"
 
-BConnection::BConnection(SOCKET s, CNode *own) : _socket(s), _owner(own), _state(eConnected), idletimes(0), _spos(0), _epos(0), _initized(false)
+size_t BConnection::_linkidhead = 0;
+
+BConnection::BConnection(SOCKET s) : _socket(s), _state(eConnected), idletimes(0), _spos(0), _epos(0), _initized(false)
 {
     _sendbuf.resize(send_buf_max);
     _recvbuf.resize(recvbuflen);
     _recvbufpos = 0;
     _revdata = &_recvbuf[0];
     _recvmsgcount = 0;
+    _id = _linkidhead++;
 }
 
 BConnection::BConnection(const BConnection &r)
@@ -131,7 +133,7 @@ void BConnection::sendData(IDtype id, const void *buf, const msgtype mt, const s
 
     size_t len = datalen + NODE_COMMON_MSG_LEN + sizeof(msgidentfy);
 
-    BNODE_MSG *msg = (BNODE_MSG *)allocBNodeMsg(len);
+    txmsg *msg = (txmsg *)allocBNodeMsg(len);
     if (msg == nullptr)
     {
         return;
@@ -143,42 +145,42 @@ void BConnection::sendData(IDtype id, const void *buf, const msgtype mt, const s
     memcpy_s(msg->data + len, sizeof(msgidentfy), msgidentfy, sizeof(msgidentfy)); //加入消息尾标识
 }
 
-void BConnection::handle(const void *buf, size_t len)
-{
-    BNODE_MSG *pMsg = (BNODE_MSG *)buf;
-    if(pMsg->msglen + NODE_COMMON_MSG_LEN != len)//消息不合法. 
-    {
-        return;
-    }
-    if(_owner == nullptr)
-    {
-        return;
-    }
-    _owner->ReceiveMessage(pMsg);
-}
-
-void BConnection::Parse()
+bool BConnection::Parse(ptxmsg *ppMsg, size_t &len)
 {
     size_t pos = 0;
     char *bpos = (char *)_revdata;
     size_t datalen = &_recvbuf[0] + _recvbufpos - _revdata;
     Trace("datalen is %u", datalen);
-    do
+
+    txmsg *pMsg = nullptr;
+
+    while (pos + sizeof(msgidentfy) <= datalen)
     {
         int ret = memcmp(bpos + pos, msgidentfy, sizeof(msgidentfy));
         if (ret == 0) //找到消息结束标识符
         {
             _recvmsgcount++;
-            handle(_revdata, bpos + pos - _revdata);
+            len = bpos + pos - _revdata;
+            pMsg = (txmsg *)_revdata;
             pos += sizeof(msgidentfy);
             _revdata += pos;
+            break;//每次只收一个消息.
         }
         else
         {
             ++pos;
         }
-    } while (pos + sizeof(msgidentfy) <= datalen);
+    }
+    
+    if(pMsg != nullptr)
+    {
+        *ppMsg = pMsg;
+        return true;
+    }
+
+    return false;
 }
+
 
 void BConnection::Recv()
 {
@@ -224,10 +226,6 @@ void BConnection::Recv()
 
     _recvbufpos += recvcount;
 
-    if (recvcount > 0)
-    {
-        Parse();
-    }
 }
 
 void BConnection::HandleError()

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BConnect.h"
-#include "BBase.h"
+#include "CNode.h"
 #include <vector>
 #include <queue>
 #include <set>
@@ -49,15 +49,15 @@ public:
     void Show();
 
 public:
-    virtual void handleSuccessorReq(const BNODE_MSG *msg);
-    virtual void handleSuccessorRsp(const BNODE_MSG *msg);
-    virtual void handleJoinReq(const BNODE_MSG *msg);
-    virtual void handleJoinPsp(const BNODE_MSG *msg);
-    virtual void handleStabilizeReq(const BNODE_MSG *msg);
-    virtual void handleStabilizeRsp(const BNODE_MSG *msg);
+    virtual void handleSuccessorReq(const txmsg *msg);
+    virtual void handleSuccessorRsp(const txmsg *msg);
+    virtual void handleJoinReq(const txmsg *msg);
+    virtual void handleJoinPsp(const txmsg *msg);
+    virtual void handleStabilizeReq(const txmsg *msg);
+    virtual void handleStabilizeRsp(const txmsg *msg);
 
 public:
-    void StartJoin(IDtype id);
+    void StartJoin(const std::string &server, const std::string &port);
     void join(IDtype id);
     void exit();
     void stabilization();
