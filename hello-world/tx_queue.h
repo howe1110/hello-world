@@ -32,6 +32,18 @@ public:
         _queue.pop();
         return true;
     };
+    
+    bool read(T &e)
+    {
+        std::unique_lock<std::mutex> lck(_mtx);
+        if(-_queue.size() <= 0)
+        {
+            return false;
+        }
+        e = _queue.front();
+        _queue.pop();
+        return true;
+    };
 
     size_t size()
     {

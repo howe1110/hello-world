@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <iostream>
 
 template <typename T>
 class txRefPtr;
@@ -53,7 +54,7 @@ public:
         }
         ref->ref();
     };
-    ~txRefPtr()
+    virtual ~txRefPtr()
     {
         std::lock_guard<std::mutex> lck(_mtx);
         if(ref == nullptr)
@@ -81,7 +82,6 @@ public:
                 delete ref;
             }
         }
-
 
         ref = rhs.ref;
         ref->ref();

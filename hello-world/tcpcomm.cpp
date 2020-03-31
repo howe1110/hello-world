@@ -1,5 +1,6 @@
 #include "tcpcomm.h"
 
+
 tcpcomm::tcpcomm(/* args */)
 {
 }
@@ -70,5 +71,9 @@ int tcpcomm::shutdownI(SOCKET s, int how)
 
 int tcpcomm::closesocketI(SOCKET s)
 {
+    if(s == INVALID_SOCKET)
+    {
+        return 0;
+    }
     return closesocket(s);
 }

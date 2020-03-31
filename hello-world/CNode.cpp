@@ -128,7 +128,6 @@ void CNode::SendBMessage(size_t linkid, const msgtype mt, void *pData, size_t da
 
 void CNode::handleShakehand(const ptxmsg msg)
 {
-    IDtype id = msg->sendid;
 }
 
 FD_SET CNode::getFdSet()

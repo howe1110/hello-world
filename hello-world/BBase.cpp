@@ -2,33 +2,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-
-network* nw = nullptr;
-
-void SetincInstance(network* p)
-{
-    nw = p;
-}
-
-void ResetincInstance()
-{
-    if(nw != nullptr)
-    {
-        delete nw;
-        nw = nullptr;
-    }
-}
-
-network* incInstance()
-{
-    if(nw == nullptr)
-    {
-        printf("Error, incIntance net set.\r\n");
-        return nullptr;
-    }
-    return nw;
-}
-
 BBase::BBase(/* args */) : _traceswitch(true)
 {
 }

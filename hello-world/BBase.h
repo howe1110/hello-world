@@ -8,9 +8,6 @@
 #include "network.h"
 
 
-void SetincInstance(network* p);
-network* incInstance();
-
 class BBase
 {
 private:

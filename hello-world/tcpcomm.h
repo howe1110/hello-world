@@ -1,6 +1,7 @@
 #include "network.h"
+#include "devinf.h"
 
-class tcpcomm : public network
+class tcpcomm : public devinf
 {
 private:
     /* data */
