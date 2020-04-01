@@ -1,5 +1,4 @@
 #pragma once
-#include "BBase.h"
 #include <winsock2.h>
 #include <string>
 #include <vector>
