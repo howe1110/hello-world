@@ -22,6 +22,14 @@ const char msgidentfy[4] = {0x1e, 0x1e, 0x1e, 0x1e};
 
 const int maxidletimes = 10;
 
+enum linkerrorcode
+{
+    TXLNKCONNERR = 0,
+    TXLNKRECVTO,
+    TXLNKRECVERR,
+    TXLNKSNDERR
+};
+
 class tlink : tx_base
 {
 private:
@@ -50,7 +58,7 @@ public:
 
 public:
     int Recv();
-    bool RecvMessage(txRefPtr<txmsg> &ptrMsg, size_t &len);
+    int RecvMessage(ptxmsg *ppMsg, size_t &len);
     int Send();
     void HandleError();
     //

@@ -1,4 +1,6 @@
 #include "comworker.h"
+#include "devinf.h"
+
 comworker::comworker(/* args */) : tx_worker_base("comworker")
 {
 }

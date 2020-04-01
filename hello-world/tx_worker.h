@@ -3,11 +3,12 @@
 #include <string>
 #include <map>
 #include <atomic>
+#include <thread>
 
 #include "tx_base.h"
 #include "tx_queue.h"
 #include "tx_msg.h"
-class CNode;
+
 typedef tx_queue<txmsg> msg_queue;
 
 typedef int worker_type;

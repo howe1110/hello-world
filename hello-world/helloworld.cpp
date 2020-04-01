@@ -4,7 +4,6 @@
 #include <map>
 #include <sstream>
 
-#include "BNode.h"
 #include "tcpcomm.h"
 
 #include <semaphore.h>
@@ -57,12 +56,10 @@ void proc(const std::string &line)
 
 void dispNodeDFunc(const std::vector<std::string> &paras)
 {
-    BNode::instance()->Show();
 }
 
 void TraceNodeDFunc(const std::vector<std::string> &paras)
 {
-    BNode::instance()->StartTrace();
 }
 
 void dispHelp(const std::vector<std::string> &paras)
@@ -80,12 +77,10 @@ void joinFunc(const std::vector<std::string> &paras)
         std::cout << "Invalid parameters." << std::endl;
         return;
     }
-    BNode::instance()->StartJoin(paras[0], paras[1]);
 }
 
 void checkFunc(const std::vector<std::string> &paras)
 {
-    BNode::instance()->stabilization();
 }
 
 void startFunc(const std::vector<std::string> &paras)
@@ -103,14 +98,6 @@ bool initialize()
         std::cout << "initialize semaphore failed." << std::endl;
         return false;
     }
-    network* nw = new tcpcomm();
-    if(nw == nullptr)
-    {
-        std::cout << "initialize incinstance failed." << std::endl;
-        return false;
-    }
-
-    SetincInstance(nw);
 
     funcmap["shownode"] = dispNodeDFunc;
     funcmap["trace"] = TraceNodeDFunc;
@@ -130,7 +117,6 @@ int main()
 {
     initialize();
 
-    BNode::instance()->Start();
     std::cout << promot;
     std::vector<std::string> paras;
     for (std::string line; std::getline(std::cin, line);)

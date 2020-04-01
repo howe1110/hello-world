@@ -92,22 +92,20 @@ bool txcomclient::Connect(const std::string &server, const std::string &port)
     return true;
 }
 
-txRefPtr<txmsg> txcomclient::Request(const void *buf, const msgtype mt, const size_t datalen)
+txcomresponse txcomclient::Request(const void *buf, const msgtype mt, const size_t datalen)
 {
-    txRefPtr<txmsg> ptrMsg;
     size_t len = 0;
 
     if (_plink->SendData(buf, mt, datalen) < 0)
     {
-        return ptrMsg;
+        return txcomresponse(TXCOMRESPERR, nullptr);
     }
-    
-    bool bRet = _plink->RecvMessage(ptrMsg, len);
-
+    ptxmsg pmsg;
+    bool bRet = _plink->RecvMessage(&pmsg, len);
     if (bRet)
     {
-        return ptrMsg;
+        return txcomresponse(TXCOMRESPOK, pmsg);
     }
     
-    return ptrMsg;
+    return txcomresponse(TXCOMRESPERR, pmsg);;
 }

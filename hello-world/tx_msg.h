@@ -1,8 +1,10 @@
 #pragma once
+
 #include "CommonDef.h"
 #include "tx_ref.h"
 
 #include "stdlib.h"
+#include <string.h>
 
 typedef unsigned int txIdType;
 
@@ -36,34 +38,28 @@ private:
     /* data */
     size_t _linkid; //应用内部使用
 public:
-    txmsgptr();
-    txmsgptr(ptxmsg pmsg);
-    ~txmsgptr();
+    txmsgptr(): txRefPtr<txmsg>()
+    {
+
+    }
+    txmsgptr(ptxmsg pmsg): txRefPtr<txmsg>(pmsg)
+    {
+
+    }
+    ~txmsgptr()
+    {
+
+    }
 
 public:
-    size_t getlinkid();
-    void setlinkid(size_t id);
+    size_t getlinkid()
+    {
+        return _linkid;
+    }
+    void setlinkid(size_t id)
+    {
+        _linkid = id;
+    }
 };
-
-txmsgptr::txmsgptr() : txRefPtr<txmsg>()
-{
-}
-
-txmsgptr::txmsgptr(ptxmsg pmsg) : txRefPtr<txmsg>(pmsg)
-{
-}
-
-txmsgptr::~txmsgptr()
-{
-}
-size_t txmsgptr::getlinkid()
-{
-    return _linkid;
-}
-
-void txmsgptr::setlinkid(size_t id)
-{
-    _linkid = id;
-}
 
 

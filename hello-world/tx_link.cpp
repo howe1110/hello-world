@@ -8,6 +8,8 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <thread>
+
 #include "devinf.h"
 
 size_t tlink::_linkidhead = 0;
@@ -232,12 +234,13 @@ int tlink::Recv()
     return recvcount;
 }
 
-bool tlink::RecvMessage(txRefPtr<txmsg> &ptrMsg, size_t &len)
+int tlink::RecvMessage(ptxmsg *ppMsg, size_t &len)
 {
     ptxmsg pMsg = nullptr;
     char recvbuf[recvbuflen] = {0};
     int recvcount = 0;
     char *precvbuf = &recvbuf[0];
+    int waittimes = 0;
     do
     {
         int iResult = incInstance()->recvI(_socket, precvbuf + recvcount, recvbuflen, 0);
@@ -246,30 +249,25 @@ bool tlink::RecvMessage(txRefPtr<txmsg> &ptrMsg, size_t &len)
             int errcode = WSAGetLastError();
             if (errcode == WSAEWOULDBLOCK)
             {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
-            if (errcode == EINTR)
-            {
-                continue;
-            }
-            if (errcode == EAGAIN)
-            {
-                continue;
-            }
-            return false;
+            return TXLNKRECVERR;
         }
         if (iResult == 0)
         {
-            return false;
+            return TXLNKRECVERR;
         }
         recvcount += iResult;
         /* code */
         if (Parse(&precvbuf, recvcount, &pMsg, len))
         {
-            ptrMsg = txmsgptr(txmsg::Clone(pMsg));
+            *ppMsg = txmsg::Clone(pMsg);
             return true;
         }
-    } while (true);
+    } while (waittimes++ < 100);
+
+    return TXLNKRECVTO;
 }
 
 void tlink::HandleError()

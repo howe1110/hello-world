@@ -15,6 +15,7 @@ private:
     {
         if(p != nullptr)
         {
+            std::cout << "delete ptr " << p << std::endl;
             delete p;
         }
     };
@@ -101,6 +102,10 @@ public:
 
     bool isNullPtr()
     {
+        if(ref == nullptr)
+        {
+            return true;
+        }
         return (ref->p == nullptr);
     }
 
