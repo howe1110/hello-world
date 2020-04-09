@@ -1,6 +1,5 @@
 #include "tx_worker.h"
-#include <ws2tcpip.h>
-
+#include <sys/socket.h>
 class comworker;
 class listen_worker : public tx_worker_base
 {
@@ -8,7 +7,7 @@ private:
     /* data */
     std::string _listen_port;
     struct sockaddr_in *_listen_addr;
-    SOCKET _lsocket; //监听socket
+    int _lsocket; //监听socket
 private:
     comworker *_comworker;
 
@@ -18,7 +17,7 @@ public:
 
 public:
     void setcommwoker(comworker *cwk);
-    void handleconnect(SOCKET st);
+    void handleconnect(int st);
 
 public:
     void proc();

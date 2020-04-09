@@ -1,6 +1,10 @@
 #include "tcpcomm.h"
-
-
+#include <netdb.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
 tcpcomm::tcpcomm(/* args */)
 {
 }
@@ -9,34 +13,43 @@ tcpcomm::~tcpcomm()
 {
 }
 
-INT tcpcomm::getaddrinfoI(PCSTR pNodeName, PCSTR pServiceName, const ADDRINFOA *pHints, PADDRINFOA *ppResult)
+int tcpcomm::getaddrinfoI(const char *node, const char *service, const struct addrinfo *hints, struct addrinfo **res)
 {
-    return getaddrinfo(pNodeName, pServiceName, pHints, ppResult);
+    return getaddrinfo(node, service, hints, res);
 }
 
-VOID tcpcomm::freeaddrinfoI(PADDRINFOA pAddrInfo)
+void tcpcomm::freeaddrinfoI(struct addrinfo *res)
 {
-    freeaddrinfo(pAddrInfo);
+    freeaddrinfo(res);
 }
 
-SOCKET tcpcomm::socketI(int af, int type, int protocol)
+int tcpcomm::socketI(int domain, int type, int protocol)
 {
-    return socket(af, type, protocol);
+    return socket(domain, type, protocol);
 }
 
-int tcpcomm::ioctlsocketI(SOCKET s, long cmd, u_long *argp)
+int tcpcomm::setsocketblock(int s, bool block)
 {
-    return ioctlsocket(s, cmd, argp);
+    int flags = fcntl(s, F_GETFL, 0);
+    if (block)
+    {
+        flags = flags | ~O_NONBLOCK;
+    }
+    else
+    {
+        flags = flags | O_NONBLOCK;
+    }
+    return fcntl(s, F_SETFL, flags);
 }
 
-int tcpcomm::bindI(SOCKET s, struct sockaddr FAR *name, int namelen)
+int tcpcomm::bindI(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
-    return bind(s, name, namelen);
+    return bind(sockfd, addr, addrlen);
 }
 
-int tcpcomm::listenI(SOCKET s, int backlog)
+int tcpcomm::listenI(int sockfd, int backlog)
 {
-    return listen(s, backlog);
+    return listen(sockfd, backlog);
 }
 
 int tcpcomm::selectI(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
@@ -44,36 +57,42 @@ int tcpcomm::selectI(int nfds, fd_set *readfds, fd_set *writefds, fd_set *except
     return select(nfds, readfds, writefds, exceptfds, timeout);
 }
 
-SOCKET tcpcomm::acceptI(SOCKET s, struct sockaddr *addr, int *addrlen)
+int tcpcomm::acceptI(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
-    return accept(s, addr, addrlen);
+    return accept(sockfd, addr, addrlen);
 }
 
-int tcpcomm::connectI(SOCKET s, const struct sockaddr *name, int namelen)
+int tcpcomm::connectI(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
-    return connect(s, name, namelen);
+    return connect(sockfd, addr, addrlen);
 }
 
-int tcpcomm::recvI(SOCKET s, char *buf, int len, int flags)
+int tcpcomm::recvI(int sockfd, void *buf, size_t len, int flags)
 {
-    return recv(s, buf, len, flags);
+    return recv(sockfd, buf, len, flags);
 }
 
-int tcpcomm::sendI(SOCKET s, char *buf, int len, int flags)
+int tcpcomm::sendI(int sockfd, const void *buf, size_t len, int flags)
 {
-    return send(s, buf, len, flags);
+    return send(sockfd, buf, len, flags);
 }
 
-int tcpcomm::shutdownI(SOCKET s, int how)
+int tcpcomm::shutdownI(int sockfd, int how)
 {
-    return shutdown(s, how);
+    return shutdown(sockfd, how);
 }
 
-int tcpcomm::closesocketI(SOCKET s)
+int tcpcomm::closesocketI(int fd)
 {
-    if(s == INVALID_SOCKET)
+    if (fd == INVALID_SOCKET)
     {
         return 0;
     }
-    return closesocket(s);
+    return close(fd);
+}
+
+int tcpcomm::setsocketreuseaddr(int fd)
+{
+    int reuse = 1;
+    return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 }

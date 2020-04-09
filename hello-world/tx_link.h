@@ -1,5 +1,5 @@
 #pragma once
-#include <winsock2.h>
+#include <sys/socket.h>
 #include <string>
 #include <vector>
 #include "tx_ref.h"
@@ -36,7 +36,7 @@ private:
     static size_t _linkidhead;
 
 private:
-    SOCKET _socket;
+    int _socket;
     bool _blockmode;
 
 private:
@@ -49,7 +49,7 @@ private:
     size_t _recvmsgcount; //接收到的消息数量
 
 public:
-    tlink(SOCKET s, bool blk);
+    tlink(int s, bool blk);
     virtual ~tlink();
 
 public:
@@ -57,7 +57,7 @@ public:
 
 public:
     int Recv();
-    int RecvMessage(ptxmsg *ppMsg, size_t &len);
+    bool RecvMessage(ptxmsg *ppMsg, size_t &len);
     int Send();
     void HandleError();
     //
@@ -74,7 +74,7 @@ public:
     size_t getId() { return _id; };
 
 public:
-    SOCKET GetSocket() const;
+    int GetSocket() const;
     ConnState GetState() const;
     int SendBufSize() const;
     bool CanWrite() const;

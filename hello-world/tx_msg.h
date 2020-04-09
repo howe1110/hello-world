@@ -4,6 +4,9 @@
 #include "tx_ref.h"
 
 #include "stdlib.h"
+
+#define __STDC_WANT_LIB_EXT1__ 1
+
 #include <string.h>
 
 typedef unsigned int txIdType;
@@ -25,10 +28,12 @@ public:
         }
         int len = sizeof(txmsg) + p->msglen;
         txmsg *pMsg = (txmsg *)malloc(len);
-        memcpy_s(pMsg, len, p, len);
+        memcpy(pMsg, p, len);
         return pMsg;
     };
 } * ptxmsg;
+
+#pragma pack()
 
 const size_t NODE_COMMON_MSG_LEN = sizeof(txmsg);
 

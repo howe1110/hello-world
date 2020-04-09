@@ -3,7 +3,6 @@
 #include "tx_worker.h"
 #include "tx_link.h"
 #include "tx_msg.h"
-#include <ws2tcpip.h>
 #include <map>
 
 class comworker : public tx_worker_base
@@ -11,22 +10,22 @@ class comworker : public tx_worker_base
 private:
     /* data */
     std::map<size_t, tlinkptr> _socketmap;
-    tx_queue<SOCKET> _socketqueue;
+    tx_queue<int> _socketqueue;
 
 public:
     comworker(/* args */);
     ~comworker();
 
 public:
-    void PostSocket(SOCKET st);
+    void PostSocket(int st);
 
 private:
     void proclinkqueue();
-    FD_SET getFdSet();
-    FD_SET getWriteSet();
-    void handleReadSockets(FD_SET fds);
-    void handleWriteSocket(FD_SET fds);
-    void handleErrorSocket(FD_SET fds);
+    void getFdSet(fd_set& fds);
+    void getWriteSet(fd_set& fds);
+    void handleReadSockets(fd_set fds);
+    void handleWriteSocket(fd_set fds);
+    void handleErrorSocket(fd_set fds);
 
 private:
     void close();

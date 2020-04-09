@@ -15,7 +15,7 @@ void comworker::stop()
     tx_worker_base::stop();
 }
 
-void comworker::PostSocket(SOCKET st)
+void comworker::PostSocket(int st)
 {
     _socketqueue.write(st);
 }
@@ -23,10 +23,9 @@ void comworker::PostSocket(SOCKET st)
 void comworker::proclinkqueue()
 {
     bool result = true;
-    
     while (result)
     {
-        SOCKET st = INVALID_SOCKET;
+        int st = INVALID_SOCKET;
         result = _socketqueue.read(st);
         if (result)
         {
@@ -40,32 +39,28 @@ void comworker::proclinkqueue()
     }
 }
 
-FD_SET comworker::getFdSet()
+void comworker::getFdSet(fd_set& fds)
 {
-    FD_SET fds_;
-    FD_ZERO(&fds_);
+    FD_ZERO(&fds);
     for (std::map<size_t, tlinkptr>::iterator it = _socketmap.begin(); it != _socketmap.end(); ++it)
     {
-        FD_SET(it->second->GetSocket(), &fds_);
+        FD_SET(it->second->GetSocket(), &fds);
     }
-    return fds_;
 }
 
-FD_SET comworker::getWriteSet()
+void comworker::getWriteSet(fd_set& fds)
 {
-    FD_SET fds_;
-    FD_ZERO(&fds_);
+    FD_ZERO(&fds);
     for (std::map<size_t, tlinkptr>::iterator it = _socketmap.begin(); it != _socketmap.end(); ++it)
     {
         if (it->second->SendBufSize() > 0 && it->second->GetState() == eConnected)
         {
-            FD_SET(it->second->GetSocket(), &fds_);
+            FD_SET(it->second->GetSocket(), &fds);
         }
     }
-    return fds_;
 }
 
-void comworker::handleReadSockets(FD_SET fds)
+void comworker::handleReadSockets(fd_set fds)
 {
     for (std::map<size_t, tlinkptr>::iterator it = _socketmap.begin(); it != _socketmap.end();)
     {
@@ -91,7 +86,7 @@ void comworker::handleReadSockets(FD_SET fds)
     }
 }
 
-void comworker::handleWriteSocket(FD_SET fds)
+void comworker::handleWriteSocket(fd_set fds)
 {
     for (std::map<size_t, tlinkptr>::iterator it = _socketmap.begin(); it != _socketmap.end(); ++it)
     {
@@ -102,7 +97,7 @@ void comworker::handleWriteSocket(FD_SET fds)
     }
 }
 
-void comworker::handleErrorSocket(FD_SET fds)
+void comworker::handleErrorSocket(fd_set fds)
 {
     for (std::map<size_t, tlinkptr>::iterator it = _socketmap.begin(); it != _socketmap.end(); ++it)
     {
@@ -120,18 +115,21 @@ void comworker::close()
 
 void comworker::proc()
 {
-    TIMEVAL tval;
-    tval.tv_sec = 1;
-    tval.tv_usec = 0;
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
     int ret = 0;
 
     while (startswitch())
     {
         proclinkqueue();
-        FD_SET fds_r = getFdSet();
-        FD_SET fds_w = getWriteSet();
-        FD_SET fds_e = getFdSet();
-        ret = incInstance()->selectI(0, &fds_r, (fd_set *)&fds_w, (fd_set *)&fds_e, &tval);
+        fd_set fds_r;
+        getFdSet(fds_r);
+        fd_set fds_w;
+        getWriteSet(fds_w);
+        fd_set fds_e;
+        getFdSet(fds_e);
+        ret = incInstance()->selectI(FD_SETSIZE, &fds_r, &fds_w, &fds_e, &tv);
         if (ret > 0)
         {
             handleReadSockets(fds_r);

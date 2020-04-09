@@ -4,9 +4,9 @@ objects = $(src_files:%.cpp=%.o)
 target = myp2p
 
 $(target): $(objects)
-	g++ $(objects) -lws2_32 -o $@
+	g++ $(objects) -lpthread -o $@
 $(objects): %.o: %.cpp
-	g++ -MMD -c $<
+	g++ -MMD  -g -c $<
 
 .PHONY: clean
 clean:

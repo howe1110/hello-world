@@ -1,8 +1,5 @@
 #include "tx_link.h"
 #include "Hash.h"
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string>
@@ -12,9 +9,13 @@
 
 #include "devinf.h"
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+
 size_t tlink::_linkidhead = 0;
 
-tlink::tlink(SOCKET s, bool blk) : _socket(s), _blockmode(blk), _state(eConnected), idletimes(0), _spos(0), _epos(0), _initized(false)
+tlink::tlink(int s, bool blk) : _socket(s), _blockmode(blk), _state(eConnected), idletimes(0), _spos(0), _epos(0), _initized(false)
 {
     _sendbuf.resize(send_buf_max);
     _recvbuf.resize(recvbuflen);
@@ -29,7 +30,7 @@ tlink::~tlink()
     incInstance()->closesocketI(_socket);
 }
 
-SOCKET tlink::GetSocket() const
+int tlink::GetSocket() const
 {
     return _socket;
 }
@@ -83,7 +84,7 @@ void *tlink::allocBNodeMsg(size_t len)
     if ((send_buf_max - _epos) <= sendbufthreshold) //剩余发送缓冲区空间不够
     {
         void *pSendData = &_sendbuf[0] + +_spos;
-        memmove_s(&_sendbuf[0], send_buf_max, pSendData, _spos);
+        memmove(&_sendbuf[0], pSendData, _spos);
         _epos -= _spos;
         _spos = 0;
     }
@@ -110,10 +111,11 @@ int tlink::Send()
     int iResult = incInstance()->sendI(_socket, pSendbuf, (_epos - _spos), 0);
     if (iResult == SOCKET_ERROR)
     {
-        printf("send failed with error: %d\n", WSAGetLastError());
+        fprintf(stderr, "send failed with error: %d\n", gai_strerror(iResult));
         return 0;
     }
     _spos += iResult;
+
     return iResult;
 }
 
@@ -134,8 +136,8 @@ int tlink::SendData(const void *buf, const msgtype mt, const size_t datalen)
     msg->msgid = mt;
     msg->msglen = datalen;
 
-    memcpy_s(msg->data, datalen, buf, datalen);                                        //拷贝消息内容
-    memcpy_s(msg->data + datalen, sizeof(msgidentfy), msgidentfy, sizeof(msgidentfy)); //加入消息尾标识
+    memcpy(msg->data, buf, datalen);                                        //拷贝消息内容
+    memcpy(msg->data + datalen, msgidentfy, sizeof(msgidentfy)); //加入消息尾标识
 
     if (!_blockmode) //如果为非阻塞模式，则直接返回，等后续socket可写时发送。
     {
@@ -157,7 +159,7 @@ bool tlink::Parse(char **ppPuf, size_t datalen, ptxmsg *ppMsg, size_t &len)
 {
     size_t pos = 0;
     char *bpos = *ppPuf;
-    
+
     txmsg *pMsg = nullptr;
 
     while (pos + sizeof(msgidentfy) <= datalen)
@@ -200,12 +202,7 @@ int tlink::Recv()
     if (buflen < recvbufthreshold) //小于阈值，开始整理缓冲区
     {
         size_t datalen = &_recvbuf[0] + _recvbufpos - _revdata;
-        errno_t e = memmove_s(&_recvbuf[0], recvbuflen, _revdata, datalen);
-        if (e != 0)
-        {
-            Trace("memmove_s error.");
-            return -1;
-        }
+        memmove(&_recvbuf[0], _revdata, datalen);
         _revdata = &_recvbuf[0];
         _recvbufpos = datalen;
     }
@@ -234,7 +231,7 @@ int tlink::Recv()
     return recvcount;
 }
 
-int tlink::RecvMessage(ptxmsg *ppMsg, size_t &len)
+bool tlink::RecvMessage(ptxmsg *ppMsg, size_t &len)
 {
     ptxmsg pMsg = nullptr;
     char recvbuf[recvbuflen] = {0};
@@ -246,17 +243,17 @@ int tlink::RecvMessage(ptxmsg *ppMsg, size_t &len)
         int iResult = incInstance()->recvI(_socket, precvbuf + recvcount, recvbuflen, 0);
         if (iResult < 0)
         {
-            int errcode = WSAGetLastError();
-            if (errcode == WSAEWOULDBLOCK)
+            int errcode = errno;
+            if (errcode == EINTR || errcode == EWOULDBLOCK || errcode == EAGAIN)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
-            return TXLNKRECVERR;
+            return false;
         }
         if (iResult == 0)
         {
-            return TXLNKRECVERR;
+            return false;
         }
         recvcount += iResult;
         /* code */
@@ -265,9 +262,9 @@ int tlink::RecvMessage(ptxmsg *ppMsg, size_t &len)
             *ppMsg = txmsg::Clone(pMsg);
             return true;
         }
-    } while (waittimes++ < 100);
+    } while (waittimes++ < 1000);
 
-    return TXLNKRECVTO;
+    return false;
 }
 
 void tlink::HandleError()
