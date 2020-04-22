@@ -26,4 +26,5 @@ public:
 };
 
 void SetincInstance(devinf *p);
+void ResetincInstance();
 devinf *incInstance();

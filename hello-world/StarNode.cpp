@@ -2,6 +2,7 @@
 #include "tcpclient.h"
 #include <algorithm>
 #include <math.h>
+#include "tx_env.h"
 
 StarNode::StarNode(/* args */)
 {
@@ -11,10 +12,10 @@ StarNode::~StarNode()
 {
 }
 
-StarNode *StarNode::instance()
+StarNode &StarNode::instance()
 {
     static StarNode ins;
-    return &ins;
+    return ins;
 }
 
 void StarNode::handlemessage(tlinkptr plink, ptxmsg pMsg)

@@ -3,10 +3,14 @@
 #include <string>
 #include <map>
 #include <sstream>
-
+#include <unistd.h>
+#include <cstdio>
 #include "tcpcomm.h"
 #include "tx_worker.h"
 #include <semaphore.h>
+#include "StarNode.h"
+#include "tx_env.h"
+#include "devinf.h"
 
 std::string promot = ">";
 
@@ -88,7 +92,6 @@ void startFunc(const std::vector<std::string> &paras)
 
 sem_t app_sem;
 
-
 bool initialize()
 {
     int err = sem_init(&app_sem, 0, 1);
@@ -112,46 +115,23 @@ void release()
     sem_destroy(&app_sem);
 }
 
-
-
-
 class tx_worker_test : public tx_worker
 {
 private:
 public:
-  tx_worker_test(std::string n) : tx_worker(n) {}
-  ~tx_worker_test() {}
+    tx_worker_test(std::string n) : tx_worker(n) {}
+    ~tx_worker_test() {}
 
 public:
-  void handleMessage(txmsgptr pMsg)
-  {
-      std::cout << "handle message." << std::endl;
-  }
+    void handleMessage(txmsgptr pMsg)
+    {
+        std::cout << "handle message." << std::endl;
+    }
 };
 
-void test()
-{
-  txmsg *msg = new txmsg();
-  txmsgptr msgptr(msg);
-  
-  tx_worker_test tt("tt");
-
-  tt.start();
-  tt.postmessage(msgptr);
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  tt.stop();
-}
-
-void start()
-{
-    test();
-}
-
-int main()
+void startshell()
 {
     initialize();
-
-    start();
 
     std::cout << promot;
     std::vector<std::string> paras;
@@ -165,5 +145,39 @@ int main()
         std::cout << promot;
     }
     release();
+}
+
+bool InitNetwork()
+{
+    tcpcomm *pcomm = new tcpcomm();
+    if (pcomm == nullptr)
+    {
+        logerr("New network instance failed.");
+        return false;
+    }
+    SetincInstance(pcomm);
+    return true;
+}
+
+void RestNetwork()
+{
+    ResetincInstance();
+}
+
+void start()
+{
+    StarNode::instance().Start();
+}
+
+int main()
+{
+    if (-1 == daemon(1, 1))
+    {
+        logerr("Failed daemonizing");
+        return 1;
+    }
+    logerr("tx service is starting.");
+    InitNetwork();
+    start();
     return 0;
 }

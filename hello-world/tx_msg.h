@@ -10,6 +10,10 @@
 #include <string.h>
 
 typedef unsigned int txIdType;
+//区间系统保留区间1-2048
+
+const txIdType msgid_timerevent = 128;
+const txIdType msgid_test_event = 256;
 
 #pragma pack(1)
 
@@ -20,6 +24,16 @@ typedef struct txmsg
     char data[0];
 
 public:
+    static txmsg *Create(void *data, txIdType id, size_t datalen)
+    {
+        size_t len = datalen + sizeof(txmsg);
+        txmsg *pMsg = (txmsg *)malloc(len);
+        memcpy(pMsg->data, data, datalen);
+        pMsg->msgid = id;
+        pMsg->msglen = datalen;
+        return pMsg;
+    }
+    
     static txmsg *Clone(txmsg *p)
     {
         if (p == nullptr)
@@ -43,17 +57,14 @@ private:
     /* data */
     size_t _linkid; //应用内部使用
 public:
-    txmsgptr(): txRefPtr<txmsg>()
+    txmsgptr() : txRefPtr<txmsg>()
     {
-
     }
-    txmsgptr(ptxmsg pmsg): txRefPtr<txmsg>(pmsg)
+    txmsgptr(ptxmsg pmsg) : txRefPtr<txmsg>(pmsg)
     {
-
     }
     ~txmsgptr()
     {
-
     }
 
 public:
@@ -66,5 +77,3 @@ public:
         _linkid = id;
     }
 };
-
-

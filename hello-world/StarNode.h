@@ -22,7 +22,7 @@ private:
 private:
     listen_worker _listener;
 public:
-    static StarNode *instance();
+    static StarNode &instance();
 private:
     void handlemessage(tlinkptr plink, ptxmsg pMsg);
 public:
